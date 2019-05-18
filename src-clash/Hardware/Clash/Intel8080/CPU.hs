@@ -27,16 +27,18 @@ import FetchM
 import Debug.Trace
 import FetchM.Demo ()
 
-data PopTarget
-    = PopToPC
+data ReadTarget
+    = ToPC
+    | ToRegPair RegPair
+    | SwapHL Addr
     deriving (Show)
 
 data Phase
     = Init
     | Fetching (Buffer 3 Value)
-    | WaitPopAddr0 PopTarget
-    | WaitPopAddr1 PopTarget Value
-    | WaitPushAddr1 Value
+    | WaitReadAddr0 Addr ReadTarget
+    | WaitReadAddr1 ReadTarget Value
+    | WaitWriteAddr1 Addr Value
     | WaitMemWrite
     | WaitMemRead (Buffer 3 Value)
     deriving (Show)
@@ -89,13 +91,23 @@ cpu = do
     case phase of
         Init -> goto $ Fetching def
         WaitMemWrite -> goto $ Fetching def
-        WaitPushAddr1 hi -> pushByte hi
-        WaitPopAddr0 PopToPC -> goto $ WaitPopAddr1 PopToPC cpuInMem
-        WaitPopAddr1 PopToPC lo -> do
+        WaitWriteAddr1 nextAddr hi -> do
+            pokeByte nextAddr hi
+            goto $ Fetching def
+        WaitReadAddr0 nextAddr target -> do
+            let lo = cpuInMem
+            tellAddr nextAddr
+            goto $ WaitReadAddr1 target lo
+        WaitReadAddr1 target lo -> do
             let hi = cpuInMem
                 addr = bitCoerce (hi, lo)
-            setPC addr
             goto $ Fetching def
+            case target of
+                ToPC -> setPC addr
+                ToRegPair rp -> setRegPair rp addr
+                SwapHL hl0 -> do
+                    setRegPair RHL addr
+                    pushAddr hl0
         Fetching buf -> do
             buf' <- remember buf <$> do
                 setPC $ pc + 1
@@ -122,12 +134,8 @@ cpu = do
     exec (JMPIf cond addr) = whenM (evalCond cond) $ setPC addr
     exec (CALL addr) = call addr
     exec (CALLIf cond addr) = whenM (evalCond cond) $ call addr
-    exec RET = do
-        popByte
-        goto $ WaitPopAddr0 PopToPC
-    exec (RETIf cond) = whenM (evalCond cond) $ do
-        popByte
-        goto $ WaitPopAddr0 PopToPC
+    exec RET = popAddr ToPC
+    exec (RETIf cond) = whenM (evalCond cond) $ popAddr ToPC
     exec (ALU fun src) = do
         a <- getReg RA
         x <- evalSrc src
@@ -211,18 +219,16 @@ cpu = do
     exec STC = setFlag FC True
     exec (LXI rp xy) = setRegPair rp xy
     exec PCHL = setPC =<< getRegPair RHL
-    -- exec (LHLD addr) = setRegPair RHL =<< peekAddr addr
-    -- exec (SHLD addr) = pokeAddr addr =<< getRegPair RHL
-    -- exec XTHL = do
-    --     hl <- getRegPair RHL
-    --     hl' <- popAddr
-    --     pushAddr hl
-    --     setRegPair RHL hl'
+    exec (LHLD addr) = peekAddr addr (ToRegPair RHL)
+    exec (SHLD addr) = pokeAddr addr =<< getRegPair RHL
+    exec XTHL = do
+        hl <- getRegPair RHL
+        popAddr (SwapHL hl)
     exec (OUT port) = writePort port =<< getReg RA
     exec (IN port) = setReg RA =<< readPort port
     exec (MOV dest src) = writeTo dest =<< evalSrc src
     exec (PUSH rp) = pushAddr =<< getRegPair rp
-    -- exec (POP rp) = setRegPair rp =<< popAddr
+    exec (POP rp) = popAddr (ToRegPair rp)
     exec instr = error $ show instr
 
 evalCond :: Cond -> M Bool
@@ -305,9 +311,8 @@ setInt allow = modify $ \s -> s{ allowInterrupts = allow }
 
 pushAddr :: Addr -> M ()
 pushAddr addr = do
-    let (lo, hi) = bitCoerce addr
-    pushByte lo
-    goto $ WaitPushAddr1 hi
+    sp <- modify (\s -> s{ sp = sp s - 2 }) *> gets sp
+    pokeAddr sp addr
 
 pushByte :: Value -> M ()
 pushByte x = do
@@ -333,6 +338,13 @@ pokeByte addr x = do
     tellAddr addr
     tellWrite x
 
+pokeAddr :: Addr -> Addr -> M ()
+pokeAddr addr x = do
+    pokeByte addr lo
+    goto $ WaitWriteAddr1 (addr + 1) hi
+  where
+    (lo, hi) = bitCoerce x
+
 peekByte :: Addr -> M Value
 peekByte addr = do
     phase <- gets phase
@@ -340,12 +352,15 @@ peekByte addr = do
         Fetching buf -> tellAddr addr >> abort
         WaitMemRead{} -> cpuInMem <$> input
 
-popByte :: M ()
-popByte = do
-    sp0 <- gets sp
-    modify $ \s -> s{ sp = sp s + 1 }
-    tellAddr sp0
-    -- goto WaitMemRead -- XXX
+popAddr :: ReadTarget -> M ()
+popAddr target = do
+    sp <- gets sp <* modify (\s -> s{ sp = sp s + 2 })
+    peekAddr sp target
+
+peekAddr :: Addr -> ReadTarget -> M ()
+peekAddr addr target = do
+    tellAddr addr
+    goto $ WaitReadAddr0 (addr + 1) target
 
 writePort :: Port -> Value -> M ()
 writePort port value = do
