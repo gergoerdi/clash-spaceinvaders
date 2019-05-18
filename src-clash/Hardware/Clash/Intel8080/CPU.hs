@@ -13,7 +13,6 @@ import Hardware.Intel8080.ALU
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Except
-import Control.Monad.Trans.Cont
 import Control.Monad.Extra (whenM)
 
 import Cactus.Clash.Util
@@ -69,8 +68,7 @@ initState = CPUState
 data CPUOut = CPUOut
     { cpuOutMemAddr :: Addr
     , cpuOutMemWrite :: Maybe Value
-    , cpuOutPortAddr :: Maybe Port
-    , cpuOutPortWrite :: Maybe Value
+    , cpuOutPortSelect :: Bool
     }
     deriving (Show)
 
@@ -79,8 +77,7 @@ defaultOut CPUState{..} = CPUOut{..}
   where
     cpuOutMemAddr = pc
     cpuOutMemWrite = Nothing
-    cpuOutPortAddr = Nothing
-    cpuOutPortWrite = Nothing
+    cpuOutPortSelect = False
 
 type M = CPU CPUIn CPUState CPUOut
 
@@ -104,13 +101,11 @@ cpu = do
                 setPC $ pc + 1
                 return cpuInMem
             instr_ <- runFetchM buf' $ fetchInstr fetch
-            evalContT $ callCC $ \quit -> do
-            let fetchMore = lift (goto (Fetching buf')) >> quit ()
             instr <- case instr_ of
-                Left Underrun -> fetchMore
+                Left Underrun -> goto (Fetching buf') >> abort
                 Left Overrun -> error "Overrun"
                 Right instr -> return instr
-            lift $ exec instr
+            exec instr
         WaitMemRead buf -> do
             instr_ <- runFetchM buf $ fetchInstr fetch
             instr <- case instr_ of
@@ -138,92 +133,84 @@ cpu = do
         x <- evalSrc src
         c <- getFlag FC
         let (c', a') = alu fun c a x
-        -- updateFlags (Just c') a'
+        updateFlags (Just c') a'
         case fun of
             CMP -> return ()
             _ -> setReg RA a'
-    exec (LDA addr) = do
-        phase <- gets phase
-        case phase of
-            Fetching buf -> tellAddr addr
-            WaitMemRead{} -> setReg RA =<< (cpuInMem <$> input)
+    exec (LDA addr) = setReg RA =<< peekByte addr
     exec (STA addr) = pokeByte addr =<< getReg RA
-    -- exec (LDAX rp) = setReg RA =<< peekByte =<< getRegPair rp
+    exec (LDAX rp) = setReg RA =<< peekByte =<< getRegPair rp
     exec (STAX rp) = do
         addr <- getRegPair rp
         pokeByte addr =<< getReg RA
     exec (DCX rp) = setRegPair rp =<< pure . subtract 1 =<< getRegPair rp
     exec (INX rp) = setRegPair rp =<< pure . (+ 1) =<< getRegPair rp
-    -- exec DAA = do
-    --     a <- getReg RA
+    exec DAA = do
+        a <- getReg RA
 
-    --     ac <- getFlag FA
-    --     (ac, a) <- return $
-    --         let (_, a0) = bitCoerce a :: (Unsigned 4, Unsigned 4)
-    --         in if a0 > 9 || ac then bitCoerce $ a `plus` (0x06 :: Value) else (False, a)
-    --     setFlag FA ac
+        ac <- getFlag FA
+        (ac, a) <- return $
+            let (_, a0) = bitCoerce a :: (Unsigned 4, Unsigned 4)
+            in if a0 > 9 || ac then bitCoerce $ add a (0x06 :: Value) else (False, a)
+        setFlag FA ac
 
-    --     c <- getFlag FC
-    --     (c, a) <- return $
-    --         let (a1, _) = bitCoerce a :: (Unsigned 4, Unsigned 4)
-    --         in if a1 > 9 || c then bitCoerce $ a `plus` (0x60 :: Value) else (False, a)
-    --     setFlag FC c
-    --     setReg RA a
-    --     return ()
-    -- exec (INR op) = do
-    --     x <- evalSrc (Op op)
-    --     let x' = x + 1
-    --     updateFlags Nothing x'
-    --     writeTo op x'
-    -- exec (DCR op) = do
-    --     x <- evalSrc (Op op)
-    --     let x' = x - 1
-    --     updateFlags Nothing x'
-    --     writeTo op x'
-    -- exec (DAD rp) = do
-    --     hl <- getRegPair RHL
-    --     arg <- getRegPair rp
-    --     let (c, hl') = bitCoerce $ hl `plus` arg
-    --     setFlag FC c
-    --     setRegPair RHL hl'
-    -- exec RRC = do
-    --     a <- getReg RA
-    --     let c = a `testBit` 0
-    --         a' = a `rotateR` 1
-    --     setFlag FC c
-    --     setReg RA a'
-    -- exec RLC = do
-    --     a <- getReg RA
-    --     let c = a `testBit` 7
-    --         a' = a `rotateL` 1
-    --     setFlag FC c
-    --     setReg RA a'
-    -- exec RAR = do
-    --     a <- getReg RA
-    --     c <- getFlag FC
-    --     let a' = (if c then (`setBit` 7) else id) (a `shiftR` 1)
-    --         c' = a `testBit` 0
-    --     setFlag FC c'
-    --     setReg RA a'
-    -- exec RAL = do
-    --     a <- getReg RA
-    --     c <- getFlag FC
-    --     let a' = (if c then (`setBit` 0) else id) (a `shiftL` 1)
-    --         c' = a `testBit` 7
-    --     setFlag FC c'
-    --     setReg RA a'
-    -- exec XCHG = do
-    --     de <- getRegPair RDE
-    --     hl <- getRegPair RHL
-    --     setRegPair RDE hl
-    --     setRegPair RHL de
-    -- exec CMA = setReg RA =<< pure . complement =<< getReg RA
-    -- exec NOP = return ()
-    -- exec STC = setFlag FC True
-    -- exec (JMP addr) = setPC addr
-    -- exec (JMPIf cond addr) = whenM (evalCond cond) $ setPC addr
-    -- exec (LXI rp xy) = setRegPair rp xy
-    -- exec PCHL = setPC =<< getRegPair RHL
+        c <- getFlag FC
+        (c, a) <- return $
+            let (a1, _) = bitCoerce a :: (Unsigned 4, Unsigned 4)
+            in if a1 > 9 || c then bitCoerce $ add a (0x60 :: Value) else (False, a)
+        setFlag FC c
+        setReg RA a
+    exec (INR op) = do
+        x <- evalSrc (Op op)
+        let x' = x + 1
+        updateFlags Nothing x'
+        writeTo op x'
+    exec (DCR op) = do
+        x <- evalSrc (Op op)
+        let x' = x - 1
+        updateFlags Nothing x'
+        writeTo op x'
+    exec (DAD rp) = do
+        hl <- getRegPair RHL
+        arg <- getRegPair rp
+        let (c, hl') = bitCoerce $ add hl arg
+        setFlag FC c
+        setRegPair RHL hl'
+    exec RRC = do
+        a <- getReg RA
+        let c = a `testBit` 0
+            a' = a `rotateR` 1
+        setFlag FC c
+        setReg RA a'
+    exec RLC = do
+        a <- getReg RA
+        let c = a `testBit` 7
+            a' = a `rotateL` 1
+        setFlag FC c
+        setReg RA a'
+    exec RAR = do
+        a <- getReg RA
+        c <- getFlag FC
+        let a' = (if c then (`setBit` 7) else id) (a `shiftR` 1)
+            c' = a `testBit` 0
+        setFlag FC c'
+        setReg RA a'
+    exec RAL = do
+        a <- getReg RA
+        c <- getFlag FC
+        let a' = (if c then (`setBit` 0) else id) (a `shiftL` 1)
+            c' = a `testBit` 7
+        setFlag FC c'
+        setReg RA a'
+    exec XCHG = do
+        de <- getRegPair RDE
+        hl <- getRegPair RHL
+        setRegPair RDE hl
+        setRegPair RHL de
+    exec CMA = setReg RA =<< pure . complement =<< getReg RA
+    exec STC = setFlag FC True
+    exec (LXI rp xy) = setRegPair rp xy
+    exec PCHL = setPC =<< getRegPair RHL
     -- exec (LHLD addr) = setRegPair RHL =<< peekAddr addr
     -- exec (SHLD addr) = pokeAddr addr =<< getRegPair RHL
     -- exec XTHL = do
@@ -231,10 +218,10 @@ cpu = do
     --     hl' <- popAddr
     --     pushAddr hl
     --     setRegPair RHL hl'
-    -- exec (OUT port) = writePort port =<< getReg RA
-    -- exec (IN port) = setReg RA =<< readPort port
-    -- exec (MOV dest src) = writeTo dest =<< evalSrc src
-    -- exec (PUSH rp) = pushAddr =<< getRegPair rp
+    exec (OUT port) = writePort port =<< getReg RA
+    exec (IN port) = setReg RA =<< readPort port
+    exec (MOV dest src) = writeTo dest =<< evalSrc src
+    exec (PUSH rp) = pushAddr =<< getRegPair rp
     -- exec (POP rp) = setRegPair rp =<< popAddr
     exec instr = error $ show instr
 
@@ -331,22 +318,57 @@ pushByte x = do
 tellAddr :: Addr -> M ()
 tellAddr addr = tell $ \cpuOut -> cpuOut{ cpuOutMemAddr = addr }
 
+tellPort :: Port -> M ()
+tellPort port = tell $ \cpuOut -> cpuOut{ cpuOutMemAddr = addr, cpuOutPortSelect = True }
+  where
+    addr = bitCoerce (port, port)
+
+tellWrite :: Value -> M ()
+tellWrite x = do
+    tell $ \cpuOut -> cpuOut{ cpuOutMemWrite = Just x }
+    goto WaitMemWrite
+
 pokeByte :: Addr -> Value -> M ()
 pokeByte addr x = do
-    tell $ \cpuOut -> cpuOut{ cpuOutMemAddr = addr, cpuOutMemWrite = Just x }
-    goto WaitMemWrite
+    tellAddr addr
+    tellWrite x
+
+peekByte :: Addr -> M Value
+peekByte addr = do
+    phase <- gets phase
+    case phase of
+        Fetching buf -> tellAddr addr >> abort
+        WaitMemRead{} -> cpuInMem <$> input
 
 popByte :: M ()
 popByte = do
     sp0 <- gets sp
     modify $ \s -> s{ sp = sp s + 1 }
-    tell $ \cpuOut -> cpuOut{ cpuOutMemAddr = sp0 }
+    tellAddr sp0
     -- goto WaitMemRead -- XXX
+
+writePort :: Port -> Value -> M ()
+writePort port value = do
+    tellPort port
+    tellWrite value
+
+readPort :: Port -> M Value
+readPort port = do
+    phase <- gets phase
+    case phase of
+        Fetching buf -> tellPort port >> abort
+        WaitMemRead{} -> cpuInMem <$> input
 
 evalSrc :: Src -> M Value
 evalSrc (Imm val) = return val
 evalSrc (Op (Reg r)) = getReg r
-evalSrc (Op AddrHL) = undefined -- XXX TODO
+evalSrc (Op AddrHL) = peekByte =<< getRegPair RHL
+
+writeTo :: Op -> Value -> M ()
+writeTo AddrHL x = do
+    addr <- getRegPair RHL
+    pokeByte addr x
+writeTo (Reg r) x = setReg r x
 
 updateFlags :: Maybe Bool -> Value -> M ()
 updateFlags c x = do
