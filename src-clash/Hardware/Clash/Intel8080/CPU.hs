@@ -27,6 +27,7 @@ import Data.Maybe (fromMaybe)
 import FetchM
 
 import Debug.Trace
+import Text.Printf
 
 data ReadTarget
     = ToPC
@@ -41,19 +42,19 @@ data Phase
     | WaitReadAddr1 ReadTarget Value
     | WaitWriteAddr1 Addr Value
     | WaitMemWrite
-    | WaitMemRead (Buffer 3 Value)
+    | WaitMemRead
     deriving (Show)
 
 data CPUIn = CPUIn
     { cpuInMem :: Value
-    , cpuInPort :: Value       -- XXX should come from cpuInMem!
-    , cpuInIRQ :: Maybe Value  -- XXX should come from cpuInMem!
+    , cpuInIRQ :: Bool
     }
     deriving (Show)
 
 data CPUState = CPUState
-    { phase :: Phase
+    { phase, prevPhase :: Phase
     , pc, sp :: Addr
+    , instrBuf :: Instr
     , registers :: Vec 8 Value
     , allowInterrupts :: Bool
     }
@@ -62,8 +63,10 @@ data CPUState = CPUState
 initState :: CPUState
 initState = CPUState
     { phase = Init
+    , prevPhase = Init
     , pc = 0x0000
     , sp = 0x0000
+    , instrBuf = NOP
     , registers = pure 0x00
     , allowInterrupts = False
     }
@@ -89,19 +92,20 @@ cpu = do
     CPUIn{..} <- input
     CPUState{..} <- get
 
+    -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show phase)) $ return ()
     case phase of
         Init -> goto $ Fetching def
         WaitMemWrite -> goto $ Fetching def
         WaitWriteAddr1 nextAddr hi -> do
             pokeByte nextAddr hi
-            goto $ Fetching def
+            goto WaitMemWrite
         WaitReadAddr0 nextAddr target -> do
             let lo = cpuInMem
             tellAddr nextAddr
             goto $ WaitReadAddr1 target lo
         WaitReadAddr1 target lo -> do
             let hi = cpuInMem
-                addr = bitCoerce (hi, lo)
+                addr = bitCoerce (lo, hi)
             goto $ Fetching def
             case target of
                 ToPC -> setPC addr
@@ -118,13 +122,13 @@ cpu = do
                 Left Underrun -> goto (Fetching buf') >> abort
                 Left Overrun -> error "Overrun"
                 Right instr -> return instr
-            exec instr
-        WaitMemRead buf -> do
-            instr_ <- runFetchM buf $ fetchInstr fetch
-            instr <- case instr_ of
-                Right instr -> return instr
+            modify $ \s -> s{ instrBuf = instr }
             goto $ Fetching def
+            trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show instr)) $ return ()
             exec instr
+        WaitMemRead -> do
+            goto $ Fetching def
+            exec instrBuf
   where
     exec NOP = return ()
     exec (RST irq) = do
@@ -296,10 +300,10 @@ call addr = do
     setPC addr
 
 goto :: Phase -> M ()
-goto ph = modify $ \s -> s{ phase = ph }
+goto ph = modify $ \s -> s{ prevPhase = phase s, phase = ph }
 
 getPC :: M Addr
-getPC = getPC
+getPC = gets pc
 
 setPC :: Addr -> M ()
 setPC pc = modify $ \s -> s{ pc = pc }
@@ -348,9 +352,12 @@ pokeAddr addr x = do
 
 peekByte :: Addr -> M Value
 peekByte addr = do
-    phase <- gets phase
+    phase <- gets prevPhase
     case phase of
-        Fetching buf -> tellAddr addr >> abort
+        Fetching buf -> do
+            tellAddr addr
+            goto $ WaitMemRead
+            abort
         WaitMemRead{} -> cpuInMem <$> input
 
 popAddr :: ReadTarget -> M ()
@@ -370,7 +377,7 @@ writePort port value = do
 
 readPort :: Port -> M Value
 readPort port = do
-    phase <- gets phase
+    phase <- gets prevPhase
     case phase of
         Fetching buf -> tellPort port >> abort
         WaitMemRead{} -> cpuInMem <$> input
