@@ -4,6 +4,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 module FetchM where
 
+import Prelude ()
 import Clash.Prelude hiding (lift)
 
 -- import Hardware.Intel8080

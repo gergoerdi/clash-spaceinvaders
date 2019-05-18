@@ -1,10 +1,12 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
+{-# LANGUAGE DataKinds #-}
 
 {-# LANGUAGE PartialTypeSignatures #-}
 module Hardware.Clash.Intel8080.CPU where
 
+import Prelude ()
 import Clash.Prelude hiding (lift)
 
 import Hardware.Intel8080
@@ -25,7 +27,6 @@ import Data.Maybe (fromMaybe)
 import FetchM
 
 import Debug.Trace
-import FetchM.Demo ()
 
 data ReadTarget
     = ToPC
