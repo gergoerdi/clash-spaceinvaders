@@ -22,7 +22,7 @@ import Cactus.Clash.CPU
 import Control.Monad.State
 import Data.Word
 import Data.Foldable (for_, traverse_)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 
 import FetchM
 
@@ -37,7 +37,7 @@ data ReadTarget
 
 data Phase
     = Init
-    | Fetching (Buffer 3 Value)
+    | Fetching Bool (Buffer 3 Value)
     | WaitReadAddr0 Addr ReadTarget
     | WaitReadAddr1 ReadTarget Value
     | WaitWriteAddr1 Addr Value
@@ -57,6 +57,7 @@ data CPUState = CPUState
     , instrBuf :: Instr
     , registers :: Vec 8 Value
     , allowInterrupts :: Bool
+    , interrupted :: Bool
     }
     deriving (Show)
 
@@ -69,12 +70,14 @@ initState = CPUState
     , instrBuf = NOP
     , registers = pure 0x00
     , allowInterrupts = False
+    , interrupted = False
     }
 
 data CPUOut = CPUOut
     { cpuOutMemAddr :: Addr
     , cpuOutMemWrite :: Maybe Value
     , cpuOutPortSelect :: Bool
+    , cpuOutIRQAck :: Bool
     }
     deriving (Show)
 
@@ -84,18 +87,21 @@ defaultOut CPUState{..} = CPUOut{..}
     cpuOutMemAddr = pc
     cpuOutMemWrite = Nothing
     cpuOutPortSelect = False
+    cpuOutIRQAck = False
 
 type M = CPU CPUIn CPUState CPUOut
 
 cpu :: M ()
 cpu = do
     CPUIn{..} <- input
-    CPUState{..} <- get
+    s0@CPUState{..} <- get
+
+    when (allowInterrupts && cpuInIRQ) $ modify $ \s -> s{ interrupted = True }
 
     -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show phase)) $ return ()
     case phase of
-        Init -> goto $ Fetching def
-        WaitMemWrite -> goto $ Fetching def
+        Init -> goto $ Fetching False def
+        WaitMemWrite -> goto $ Fetching False def
         WaitWriteAddr1 nextAddr hi -> do
             pokeByte nextAddr hi
             goto WaitMemWrite
@@ -106,28 +112,33 @@ cpu = do
         WaitReadAddr1 target lo -> do
             let hi = cpuInMem
                 addr = bitCoerce (lo, hi)
-            goto $ Fetching def
+            goto $ Fetching False def
             case target of
                 ToPC -> setPC addr
                 ToRegPair rp -> setRegPair rp addr
                 SwapHL hl0 -> do
                     setRegPair RHL addr
                     pushAddr hl0
-        Fetching buf -> do
+        Fetching False buf | isNothing (bufferLast buf) && interrupted -> do
+            -- () <- trace (show ("Interrupt accepted", pc)) $ return ()
+            modify $ \s -> s{ allowInterrupts = False, interrupted = False }
+            tell $ \out -> out{ cpuOutIRQAck = True }
+            goto $ Fetching True def
+        Fetching interrupting buf -> do
             buf' <- remember buf <$> do
-                setPC $ pc + 1
+                unless interrupting $ setPC $ pc + 1
                 return cpuInMem
             instr_ <- runFetchM buf' $ fetchInstr fetch
             instr <- case instr_ of
-                Left Underrun -> goto (Fetching buf') >> abort
+                Left Underrun -> goto (Fetching interrupting buf') >> abort
                 Left Overrun -> error "Overrun"
                 Right instr -> return instr
             modify $ \s -> s{ instrBuf = instr }
-            goto $ Fetching def
-            trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show instr)) $ return ()
+            goto $ Fetching False def
+            -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show instr)) $ return ()
             exec instr
         WaitMemRead -> do
-            goto $ Fetching def
+            goto $ Fetching False def
             exec instrBuf
   where
     exec NOP = return ()
@@ -354,11 +365,11 @@ peekByte :: Addr -> M Value
 peekByte addr = do
     phase <- gets prevPhase
     case phase of
-        Fetching buf -> do
+        Fetching _ buf -> do
             tellAddr addr
             goto $ WaitMemRead
             abort
-        WaitMemRead{} -> cpuInMem <$> input
+        WaitMemRead -> cpuInMem <$> input
 
 popAddr :: ReadTarget -> M ()
 popAddr target = do
@@ -379,8 +390,11 @@ readPort :: Port -> M Value
 readPort port = do
     phase <- gets prevPhase
     case phase of
-        Fetching buf -> tellPort port >> abort
-        WaitMemRead{} -> cpuInMem <$> input
+        Fetching _ buf -> do
+            tellPort port
+            goto WaitMemRead
+            abort
+        WaitMemRead -> cpuInMem <$> input
 
 evalSrc :: Src -> M Value
 evalSrc (Imm val) = return val

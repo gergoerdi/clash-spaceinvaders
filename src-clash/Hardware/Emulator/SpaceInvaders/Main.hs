@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, DataKinds, BinaryLiterals #-}
 module Main where
 
 import Hardware.Intel8080
@@ -33,6 +33,9 @@ import Data.Foldable (traverse_)
 import qualified Data.List as L
 import qualified Data.ByteString as BS
 
+import System.IO
+import Debug.Trace
+
 -- import Paths_space_invaders_arcade
 
 instance (KnownNat n) => Ix (Unsigned n) where
@@ -40,31 +43,80 @@ instance (KnownNat n) => Ix (Unsigned n) where
     index (a, b) x = index (fromIntegral a, fromIntegral b) (fromIntegral x)
     inRange (a, b) x = inRange (fromIntegral a, fromIntegral b) (fromIntegral x)
 
+data IRQ = NewIRQ Value
+         | QueuedIRQ Value
+
 data IOR = MkIOR
     { mem :: SyncMem Addr Value
-    , ports :: (Port -> IO Value, Port -> Value -> IO ())
+    , readPort :: Port -> IO Value
+    , writePort :: Port -> Value -> IO ()
+    , irq :: IORef (Maybe IRQ)
+    , irqAck :: IORef Bool
+    , portSelect :: IORef (Maybe Value)
     }
 
 mkIOR :: SyncMem Addr Value -> (Port -> IO Value) -> (Port -> Value -> IO ()) -> IO IOR
 mkIOR mem readPort writePort = do
-    let ports = (readPort, writePort)
+    irq <- newIORef Nothing
+    irqAck <- newIORef False
+    portSelect <- newIORef Nothing
     return MkIOR{..}
+
+interrupt :: IOR -> Unsigned 3 -> IO ()
+interrupt MkIOR{..} v = writeIORef irq $ Just $ NewIRQ rst
+  where
+    rst = bitCoerce (0b11 :: Unsigned 2, v, 0b111 :: Unsigned 3)
 
 cpuIO :: CPU CPUIn CPUState CPUOut () -> RWST IOR () CPUState IO ()
 cpuIO step = do
     MkIOR{..} <- ask
-    cpuInMem <- lift $ readData mem
-    cpuInIRQ <- return False
+    cpuInMem <- lift $ do
+        interrupting <- readIORef irqAck
+        readingPort <- readIORef portSelect
+        case readingPort of
+            Just port -> do
+                readPort port
+            _
+              | interrupting -> do
+                  putStrLn "Interrupting!"
+                  irqInstr <- do
+                      req <- readIORef irq
+                      case req of
+                          Just (QueuedIRQ op) -> return op
+                          _ -> return 0x00
+                  writeIORef irq Nothing
+                  printf "IRQ: 0x%02x\n" (fromIntegral irqInstr :: Word8)
+                  return irqInstr
+              | otherwise -> do
+                  readData mem
+    cpuInIRQ <- lift $ do
+        req <- readIORef irq
+        case req of
+            Just (NewIRQ op) -> do
+                writeIORef irq $ Just $ QueuedIRQ op
+                return True
+            _ -> return False
     s <- get
     let (CPUOut{..}, s') = runState (runCPU defaultOut step CPUIn{..}) s
     put s'
     lift $ latchAddress mem cpuOutMemAddr
-    lift $ traverse_ (writeData mem cpuOutMemAddr) cpuOutMemWrite
+    lift $ if cpuOutPortSelect
+           then do
+               let port = truncateB cpuOutMemAddr
+               printf "Port IO: %02x\n" (fromIntegral port :: Word8)
+               writeIORef portSelect $ Just port
+               traverse_ (writePort port) cpuOutMemWrite
+           else do
+               writeIORef portSelect Nothing
+               traverse_ (writeData mem cpuOutMemAddr) cpuOutMemWrite
+    lift $ writeIORef irqAck cpuOutIRQAck
     -- lift $ printf "<- %04x\n" (fromIntegral cpuOutMemAddr :: Word16)
     return ()
 
 main :: IO ()
 main = do
+    hSetBuffering stdout NoBuffering
+
     -- romFile <- getDataFileName "image/invaders.rom"
     romFile <- return "../emu/image/invaders.rom"
     bs <- BS.unpack <$> BS.readFile romFile
@@ -95,7 +147,7 @@ main = do
     let s = initState
 
     let runSome target s = do
-            let stepsPerTick = 100
+            let stepsPerTick = 500
             (s, i) <- ($ (s, 0)) $ fix $ \loop (s, i) -> do
                 (s, _) <- execRWST (replicateM_ stepsPerTick $ cpuIO cpu) r s
                 now <- ticks
@@ -116,10 +168,9 @@ main = do
             target2 = target1 + (frameTime `div` 2)
 
         s <- lift $ runSome target1 s
-        -- (s, _) <- lift $ execRWST (interrupt $ RST 0x01) r s
+        lift $ interrupt r 0x01
         s <- lift $ runSome target2 s
-        -- (s, _) <- lift $ execRWST (interrupt $ RST 0x02) r s
+        lift $ interrupt r 0x02
 
         render videobuf
-        -- exit
         return s
