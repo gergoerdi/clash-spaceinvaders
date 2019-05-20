@@ -111,7 +111,7 @@ cpu = do
             goto $ WaitReadAddr1 target lo
         WaitReadAddr1 target lo -> do
             let hi = cpuInMem
-                addr = bitCoerce (lo, hi)
+                addr = bitCoerce (hi, lo)
             goto $ Fetching False def
             case target of
                 ToPC -> setPC addr
@@ -359,7 +359,7 @@ pokeAddr addr x = do
     pokeByte addr lo
     goto $ WaitWriteAddr1 (addr + 1) hi
   where
-    (lo, hi) = bitCoerce x
+    (hi, lo) = bitCoerce x
 
 peekByte :: Addr -> M Value
 peekByte addr = do
