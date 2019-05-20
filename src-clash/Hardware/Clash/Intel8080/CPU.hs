@@ -68,7 +68,7 @@ initState = CPUState
     , pc = 0x0000
     , sp = 0x0000
     , instrBuf = NOP
-    , registers = pure 0x00
+    , registers = replace 1 0x02 $ pure 0x00
     , allowInterrupts = False
     , interrupted = False
     }
