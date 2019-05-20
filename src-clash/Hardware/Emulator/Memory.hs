@@ -18,7 +18,7 @@ ram arr = MkMem
     , peekAt = readArray arr
     }
 
-data SyncMem a d = SyncMem
+data SyncMem a d = MkSyncMem
     { smemAddrReg :: IORef (Maybe a)
     , smemMem :: Mem IO a d
     }
@@ -26,15 +26,15 @@ data SyncMem a d = SyncMem
 mkSyncMemory :: (Ix a) => Mem IO a d -> IO (SyncMem a d)
 mkSyncMemory smemMem = do
     smemAddrReg <- newIORef Nothing
-    return $ SyncMem{..}
+    return $ MkSyncMem{..}
 
 latchAddress :: SyncMem a d -> a -> IO ()
-latchAddress SyncMem{..} = writeIORef smemAddrReg . Just
+latchAddress MkSyncMem{..} = writeIORef smemAddrReg . Just
 
 readData :: (Ix a) => SyncMem a d -> IO d
-readData SyncMem{..} = do
+readData MkSyncMem{..} = do
     addr <- readIORef smemAddrReg
     maybe (return $ error "Address register unset") (peekAt smemMem) addr
 
 writeData :: (Ix a) => SyncMem a d -> a -> d -> IO ()
-writeData SyncMem{..} addr d = pokeTo smemMem addr d
+writeData MkSyncMem{..} addr d = pokeTo smemMem addr d
