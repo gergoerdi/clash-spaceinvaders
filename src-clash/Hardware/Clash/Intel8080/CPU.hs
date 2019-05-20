@@ -91,12 +91,17 @@ defaultOut CPUState{..} = CPUOut{..}
 
 type M = CPU CPUIn CPUState CPUOut
 
+acceptInterrupt :: Bool -> M ()
+acceptInterrupt irq = do
+    allowed <- gets allowInterrupts
+    when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
+
 cpu :: M ()
 cpu = do
     CPUIn{..} <- input
-    s0@CPUState{..} <- get
+    acceptInterrupt cpuInIRQ
 
-    when (allowInterrupts && cpuInIRQ) $ modify $ \s -> s{ interrupted = True }
+    CPUState{..} <- get
 
     -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show phase)) $ return ()
     case phase of
