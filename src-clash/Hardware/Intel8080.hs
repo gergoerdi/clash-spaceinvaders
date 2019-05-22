@@ -5,14 +5,35 @@ import Prelude ()
 -- import Data.Word
 import Clash.Prelude
 
-data Reg = RA | RB | RC | RD | RE | RH | RL
-    deriving (Eq, Ord, Show, Enum, Bounded)
+type NumRegs = 8
+type Reg = Index NumRegs
 
-data RegPair = RAF | RBC | RDE | RHL | SP
-    deriving (Eq, Ord, Show, Enum, Bounded)
+rA, rFlags, rB, rC, rD, rE, rH, rL :: Reg
+rA = 7
+rFlags = 6
+rB = 0
+rC = 1
+rD = 2
+rE = 3
+rH = 4
+rL = 5
 
-data Flag = FS | FZ | FA | FP | FC
-    deriving (Eq, Ord, Show, Enum, Bounded)
+data RegPair = Regs Reg Reg | SP
+    deriving (Eq, Ord, Show)
+
+rBC, rDE, rHL :: RegPair
+rBC = Regs rB rC
+rDE = Regs rD rE
+rHL = Regs rH rL
+
+type Flag = Index 8
+
+fS, fZ, fA, fP, fC :: Flag
+fS = 7
+fZ = 6
+fA = 4
+fP = 2
+fC = 0
 
 data Op
     = Reg Reg

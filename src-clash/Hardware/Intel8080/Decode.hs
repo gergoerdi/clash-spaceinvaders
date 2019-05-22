@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs, DataKinds #-}
 {-# LANGUAGE BinaryLiterals #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Extra.Solver #-}
 module Hardware.Intel8080.Decode (fetchInstr) where
 
 import Prelude ()
@@ -7,43 +8,38 @@ import Data.Word
 import Clash.Prelude
 import Hardware.Intel8080
 
-decodeOp :: Vec 3 Bit -> Op
-decodeOp op = case unpack (pack op) :: Unsigned 3 of
-    0b111 -> Reg RA
-    0b000 -> Reg RB
-    0b001 -> Reg RC
-    0b010 -> Reg RD
-    0b011 -> Reg RE
-    0b100 -> Reg RH
-    0b101 -> Reg RL
-    0b110 -> AddrHL
+import Text.Printf
+
+decodeOp :: Reg -> Op
+decodeOp 6 = AddrHL
+decodeOp reg = Reg reg
 
 decodeCond :: Vec 3 Bit -> Cond
 decodeCond cond = Cond flag b
   where
     (flag0, b) = unpack (pack cond) :: (Unsigned 2, Bool)
     flag = case flag0 of
-        0b00 -> FZ
-        0b01 -> FC
-        0b10 -> FP
-        0b11 -> FS
+        0b00 -> fZ
+        0b01 -> fC
+        0b10 -> fP
+        0b11 -> fS
 
 decodeRP :: Bit -> Bit -> RegPair
-decodeRP 0 0 = RBC
-decodeRP 0 1 = RDE
-decodeRP 1 0 = RHL
+decodeRP 0 0 = Regs rB rC
+decodeRP 0 1 = Regs rD rE
+decodeRP 1 0 = Regs rH rL
 decodeRP 1 1 = SP
 
 decodeRPPP :: Bit -> Bit -> RegPair
-decodeRPPP 1 1 = RAF
+decodeRPPP 1 1 = Regs rA rFlags
 decodeRPPP r p = decodeRP r p
 
 fetchInstr :: (Monad m) => m (Unsigned 8) -> m Instr
 fetchInstr fetch = do
     b1 <- fetch
     let b1'@(_ :> _ :> d2@r :> d1@p :> d0 :> s2 :> s1 :> s0 :> Nil) = bitCoerce b1 :: Vec 8 Bit
-        d = decodeOp (d2 :> d1 :> d0 :> Nil)
-        s = decodeOp (s2 :> s1 :> s0 :> Nil)
+        d = decodeOp $ bitCoerce (d2, d1, d0)
+        s = decodeOp $ bitCoerce (s2, s1, s0)
         rp = decodeRP r p
         rppp = decodeRPPP r p
         cond = decodeCond (d2 :> d1 :> d0 :> Nil)
@@ -119,6 +115,8 @@ fetchInstr fetch = do
         1 :> 1 :> _ :> _ :> _ :> 1 :> 1 :> 1 :> Nil -> return $ RST $ bitCoerce $ d2 :> d1 :> d0 :> Nil
         0 :> 1 :> 1 :> 1 :> 0 :> 1 :> 1 :> 0 :> Nil -> return HLT
         0 :> 0 :> 0 :> 0 :> 0 :> 0 :> 0 :> 0 :> Nil -> return NOP
+        _ -> error $ printf "Unknown opcode: %02x" (fromIntegral b1 :: Word8)
+        -- _ -> return NOP
 
   where
     fetch16 = do
