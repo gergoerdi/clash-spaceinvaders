@@ -1,12 +1,13 @@
 {-# LANGUAGE DataKinds, TypeApplications, ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BinaryLiterals #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeSynonymInstances,FlexibleInstances #-}
 module Hardware.Emulator.Intel8080.CPU where
 
 import Hardware.Intel8080
 import Hardware.Intel8080.ALU
 import Hardware.Intel8080.Decode
+import Hardware.Intel8080.Microcode
 import Hardware.Emulator.Memory
 
 import Prelude ()
@@ -46,6 +47,13 @@ mkR mem readPortIO writePortIO = do
     return MkR{..}
 
 type CPU = RWST R () S IO
+
+instance Intel8080 CPU where
+    getReg r = gets $ (!! r) . registers
+    setReg r v = modify $ \s@MkS{..} -> s{ registers = replace r v registers }
+
+    getSP = gets sp
+    setSP addr = modify $ \s -> s{ sp = addr }
 
 dumpState :: CPU ()
 dumpState = do
@@ -104,45 +112,10 @@ popAddr = do
     sp <- gets sp <* modify (\s -> s{ sp = sp s + 2 })
     peekAddr sp
 
-getReg :: Reg -> CPU Value
-getReg r = gets $ (!! r) . registers
-
-setReg :: Reg -> Value -> CPU ()
-setReg r v = modify $ \s@MkS{..} -> s{ registers = replace r v registers }
-
-getFlags :: CPU Value
-getFlags = getReg rFlags
-
-setFlags :: Value -> CPU ()
-setFlags = setReg rFlags
-
-getFlag :: Flag -> CPU Bool
-getFlag flag = do
-    flags <- getFlags
-    return $ bitToBool $ flags ! flag
-
-setFlag :: Flag -> Bool -> CPU ()
-setFlag flag b = do
-    flags <- getFlags
-    setFlags $ replaceBit flag (boolToBit b) flags
-
-getRegPair :: RegPair -> CPU Addr
-getRegPair (Regs r1 r2) = bitCoerce <$> ((,) <$> getReg r1 <*> getReg r2)
-getRegPair SP = gets sp
-
-setRegPair :: RegPair -> Addr -> CPU ()
-setRegPair (Regs r1 r2) x = setReg r1 hi >> setReg r2 lo
-  where
-    (hi, lo) = bitCoerce x
-setRegPair SP x = modify $ \s -> s{ sp = x }
-
 evalSrc :: Src -> CPU Value
 evalSrc (Imm val) = return val
 evalSrc (Op (Reg r)) = getReg r
 evalSrc (Op AddrHL) = peekByte =<< getRegPair rHL
-
-evalCond :: Cond -> CPU Bool
-evalCond (Cond flag target) = (== target) <$> getFlag flag
 
 writeTo :: Op -> Value -> CPU ()
 writeTo AddrHL x = do
@@ -169,16 +142,6 @@ enableInterrupts = modify $ \s -> s{ allowInterrupts = True }
 setInt :: Bool -> CPU ()
 setInt True = enableInterrupts
 setInt False = disableInterrupts
-
-updateFlags :: Maybe Bool -> Value -> CPU ()
-updateFlags c x = do
-    traverse_ (setFlag fC) c
-    setFlag fZ (x == 0)
-    -- TODO:
-    -- fA Auxillary carry
-    setFlag fS (x `testBit` 7)
-    setFlag fP (odd $ popCount x)
-    return ()
 
 step :: CPU ()
 step = do

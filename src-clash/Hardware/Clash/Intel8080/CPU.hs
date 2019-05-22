@@ -2,6 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeSynonymInstances,FlexibleInstances #-}
 
 {-# LANGUAGE PartialTypeSignatures #-}
 module Hardware.Clash.Intel8080.CPU where
@@ -10,6 +11,7 @@ import Prelude ()
 import Clash.Prelude hiding (lift)
 
 import Hardware.Intel8080
+import Hardware.Intel8080.Microcode
 import Hardware.Intel8080.Decode
 import Hardware.Intel8080.ALU
 import Control.Monad.Reader
@@ -90,6 +92,13 @@ defaultOut CPUState{..} = CPUOut{..}
     cpuOutIRQAck = False
 
 type M = CPU CPUIn CPUState CPUOut
+
+instance Intel8080 M where
+    getReg r = gets $ (!! r) . registers
+    setReg r v = modify $ \s@CPUState{..} -> s{ registers = replace r v registers }
+
+    getSP = gets sp
+    setSP addr = modify $ \s -> s{ sp = addr }
 
 acceptInterrupt :: Bool -> M ()
 acceptInterrupt irq = do
@@ -252,41 +261,6 @@ cpu = do
     exec (POP rp) = popAddr (ToRegPair rp)
     exec instr = error $ show instr
 
-evalCond :: Cond -> M Bool
-evalCond (Cond flag target) = (== target) <$> getFlag flag
-
-getReg :: Reg -> M Value
-getReg r = gets $ (!! r) . registers
-
-setReg :: Reg -> Value -> M ()
-setReg r v = modify $ \s@CPUState{..} -> s{ registers = replace r v registers }
-
-getFlags :: M Value
-getFlags = getReg rFlags
-
-setFlags :: Value -> M ()
-setFlags = setReg rFlags
-
-getRegPair :: RegPair -> M Addr
-getRegPair (Regs r1 r2) = bitCoerce <$> ((,) <$> getReg r1 <*> getReg r2)
-getRegPair SP = gets sp
-
-setRegPair :: RegPair -> Addr -> M ()
-setRegPair (Regs r1 r2) x = setReg r1 hi >> setReg r2 lo
-  where
-    (hi, lo) = bitCoerce x
-setRegPair SP x = modify $ \s -> s{ sp = x }
-
-getFlag :: Flag -> M Bool
-getFlag flag = do
-    flags <- getFlags
-    return $ bitToBool $ flags ! flag
-
-setFlag :: Flag -> Bool -> M ()
-setFlag flag b = do
-    flags <- getFlags
-    setFlags $ replaceBit flag (boolToBit b) flags
-
 call :: Addr -> M ()
 call addr = do
     pushAddr =<< getPC
@@ -388,13 +362,3 @@ writeTo AddrHL x = do
     addr <- getRegPair rHL
     pokeByte addr x
 writeTo (Reg r) x = setReg r x
-
-updateFlags :: Maybe Bool -> Value -> M ()
-updateFlags c x = do
-    traverse_ (setFlag fC) c
-    setFlag fZ (x == 0)
-    -- TODO:
-    -- fA Auxillary carry
-    setFlag fS (x `testBit` 7)
-    setFlag fP (odd $ popCount x)
-    return ()
