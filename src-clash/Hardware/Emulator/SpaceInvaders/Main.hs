@@ -97,7 +97,7 @@ cpuIO step emuStep = do
 
     let checkEvent thisEvent = do
             (s, emuS, lastEvent) <- get
-            when (Just thisEvent /= lastEvent) $ do
+            when (True || Just thisEvent /= lastEvent) $ do
                 ev <- lift $ takeTrace emuMemTrace
                 unless (ev == thisEvent) $ error $
                   printf "\n0x%04x %s: %s\n%s\n%s\n" (pc s) (show $ instrBuf s) (show (thisEvent, ev)) (show s) (show emuS)
