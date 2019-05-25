@@ -45,7 +45,7 @@ green = (0x00, 0xff, 0x00)
 red :: (Word8, Word8, Word8)
 red = (0xff, 0x00, 0x00)
 
-withVideoMem :: Mem IO Addr Value -> IOUArray Int Word8 -> Mem IO Addr Value
+withVideoMem :: (MonadIO m) => Mem m Addr Value -> IOUArray Int Word8 -> Mem m Addr Value
 withVideoMem ram videobuf = MkMem
     { peekAt = peekAt ram
     , pokeTo = \addr val -> do
@@ -64,7 +64,7 @@ withVideoMem ram videobuf = MkMem
                     (r, g, b) = case bit of
                         True -> col
                         False -> black
-                zipWithM_ (\j -> writeArray videobuf (addr + j)) [0..] [maxBound, b, g, r]
+                zipWithM_ (\j -> liftIO . writeArray videobuf (addr + j)) [0..] [maxBound, b, g, r]
     }
 
 withMainWindow :: (MonadIO m) => ((IOUArray Int Word8 -> m ()) -> IO ()) -> IO ()
