@@ -11,7 +11,7 @@ extra-deps:
 #  - ghc-typelits-knownnat-0.6
 #  - ghc-typelits-extra-0.3
   - git: git@github.com:clash-lang/clash-compiler
-    commit: 28b678ec174758584015434dbfa5d699348488ae
+    commit: b8440afa1289593772c60e49f04ec5a000b59bc3
     subdirs:
     - clash-prelude
     - clash-lib

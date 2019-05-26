@@ -35,7 +35,7 @@ data ReadTarget
     = ToPC
     | ToRegPair RegPair
     | SwapHL Addr
-    deriving (Show)
+    deriving (Show, Generic, Undefined)
 
 data Phase
     = Init

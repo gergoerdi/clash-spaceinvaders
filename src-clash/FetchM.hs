@@ -23,7 +23,7 @@ data Buffer n dat = Buffer
     { bufferContents :: Vec n dat
     , bufferLast :: Maybe (Index n)
     }
-    deriving (Show)
+    deriving (Show, Generic, Undefined)
 
 instance (KnownNat n, Default dat) => Default (Buffer n dat) where
     def = Buffer (pure def) Nothing

@@ -19,7 +19,7 @@ rH = 4
 rL = 5
 
 data RegPair = Regs Reg Reg | SP
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic, Undefined)
 
 rBC, rDE, rHL :: RegPair
 rBC = Regs rB rC
@@ -38,7 +38,7 @@ fC = 0
 data Op
     = Reg Reg
     | AddrHL
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic, Undefined)
 
 type Value = Unsigned 8
 type Addr = Unsigned 16
@@ -47,13 +47,13 @@ type Port = Unsigned 8
 data Src
     = Op Op
     | Imm Value
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic, Undefined)
 
 data ALU = ADD | ADC | SUB | SBB | AND | OR | XOR | CMP
-    deriving (Eq, Ord, Show, Enum, Bounded)
+    deriving (Eq, Ord, Show, Enum, Bounded, Generic, Undefined)
 
 data Cond = Cond Flag Bool
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic, Undefined)
 
 data Instr
     = MOV Op Src
