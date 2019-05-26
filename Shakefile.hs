@@ -15,7 +15,7 @@ import Data.Maybe (fromMaybe)
 
 clashProject = ClashProject
     { projectName = "SpaceInvaders"
-    , clashModule = "SpaceInvaders"
+    , clashModule = "Hardware/Clash/SpaceInvaders/Main"
     , clashTopName = "SpaceInvaders"
     , topName = "Top"
     , clashFlags =
@@ -34,11 +34,7 @@ main = mainForCustom clashProject $ \ClashKit{..} -> do
         imageFile <- fromMaybe (error "missing IMAGE") <$> getConfig "IMAGE"
 
         bs <- liftIO $ BS.unpack <$> BS.readFile imageFile
-        bs <- return $ L.take 4096 $ L.replicate 0x200 0 <> bs <> L.repeat 0
+        bs <- return $ L.take 0x2000 $ bs <> L.repeat 0
         let bvs = L.map (filter (/= '_') . show . pack) bs
         writeFileChanged out (unlines bvs)
-
-    -- phony "model" $ do
-    --     clash "clashi" ["-isrc-model", "src-model" </> "SDLIO.hs"]
-
     return ()

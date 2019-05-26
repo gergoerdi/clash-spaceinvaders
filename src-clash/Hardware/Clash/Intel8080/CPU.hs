@@ -45,7 +45,7 @@ data Phase
     | WaitWriteAddr1 Addr Value
     | WaitMemWrite
     | WaitMemRead
-    deriving (Show)
+    deriving (Show, Generic, Undefined)
 
 data CPUIn = CPUIn
     { cpuInMem :: Value
@@ -61,7 +61,7 @@ data CPUState = CPUState
     , allowInterrupts :: Bool
     , interrupted :: Bool
     }
-    deriving (Show)
+    deriving (Show, Generic, Undefined)
 
 initState :: CPUState
 initState = CPUState

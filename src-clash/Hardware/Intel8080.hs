@@ -96,4 +96,4 @@ data Instr
     | INT Bool
     | HLT
     | NOP
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic, Undefined)
