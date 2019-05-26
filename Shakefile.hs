@@ -15,13 +15,13 @@ import Data.Maybe (fromMaybe)
 
 clashProject = ClashProject
     { projectName = "SpaceInvaders"
-    , clashModule = "Hardware/Clash/SpaceInvaders/Main"
+    , clashModule = "SpaceInvaders"
     , clashTopName = "SpaceInvaders"
     , topName = "Top"
     , clashFlags =
         [ "-iclash-utils/src-clash"
         , "-Wno-partial-type-signatures"
-        , "-fclash-inline-limit=100"
+        , "-fclash-inline-limit=50"
         , "-fclash-intwidth=32"
         ]
     , shakeDir = "clash-utils/shake"
