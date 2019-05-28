@@ -8,8 +8,6 @@ import Data.Word
 import Clash.Prelude
 import Hardware.Intel8080
 
-import Text.Printf
-
 decodeOp :: Reg -> Op
 decodeOp 6 = AddrHL
 decodeOp reg = Reg reg
@@ -115,8 +113,8 @@ fetchInstr fetch = do
         1 :> 1 :> _ :> _ :> _ :> 1 :> 1 :> 1 :> Nil -> return $ RST $ bitCoerce $ d2 :> d1 :> d0 :> Nil
         0 :> 1 :> 1 :> 1 :> 0 :> 1 :> 1 :> 0 :> Nil -> return HLT
         0 :> 0 :> 0 :> 0 :> 0 :> 0 :> 0 :> 0 :> Nil -> return NOP
-        _ -> error $ printf "Unknown opcode: %02x" (fromIntegral b1 :: Word8)
-        -- _ -> return NOP
+        -- _ -> error $ printf "Unknown opcode: %02x" (fromIntegral b1 :: Word8)
+        _ -> return NOP
 
   where
     fetch16 = do

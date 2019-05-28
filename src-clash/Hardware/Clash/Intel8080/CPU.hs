@@ -28,9 +28,6 @@ import Data.Maybe (fromMaybe, isNothing)
 
 import FetchM
 
-import Debug.Trace
-import Text.Printf
-
 data ReadTarget
     = ToPC
     | ToRegPair RegPair
@@ -134,7 +131,7 @@ cpu = do
                     setRegPair rHL addr
                     pushAddr hl0
         Fetching False buf | isNothing (bufferLast buf) && interrupted -> do
-            -- () <- trace (show ("Interrupt accepted", pc)) $ return ()
+            -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
             tell $ \out -> out{ cpuOutIRQAck = True }
             goto $ Fetching True def
