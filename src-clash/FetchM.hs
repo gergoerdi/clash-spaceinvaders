@@ -1,7 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
 
-{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE DataKinds, TypeOperators #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.KnownNat.Solver #-}
 module FetchM where
 
 import Prelude ()

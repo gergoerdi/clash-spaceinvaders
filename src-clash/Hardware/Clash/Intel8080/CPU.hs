@@ -3,8 +3,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeSynonymInstances,FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 
-{-# LANGUAGE PartialTypeSignatures #-}
 module Hardware.Clash.Intel8080.CPU where
 
 import Prelude ()

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 module Hardware.Intel8080 where
 
 import Prelude ()
