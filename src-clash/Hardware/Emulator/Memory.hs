@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts, RecordWildCards #-}
 module Hardware.Emulator.Memory where
 
+import Clash.Prelude
+import System.IO
 import Data.Array.IO
 import Control.Monad.Trans
 import Data.IORef

@@ -3,6 +3,7 @@
 {-# LANGUAGE UnboxedTuples, MagicHash #-}
 module Hardware.Emulator.SpaceInvaders.ArrayToBS where
 
+import Clash.Prelude
 import Data.ByteString.Internal (ByteString(..))
 import Data.Array.IO.Internals  (IOUArray(..))
 import Data.Array.Base          (STUArray(..))
