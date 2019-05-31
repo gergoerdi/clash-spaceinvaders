@@ -24,7 +24,7 @@ import Cactus.Clash.CPU
 import Control.Monad.State
 import Data.Word
 import Data.Foldable (for_, traverse_)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe)
 
 import FetchM
 
@@ -130,7 +130,7 @@ cpu = do
                 SwapHL hl0 -> do
                     setRegPair rHL addr
                     pushAddr hl0
-        Fetching False buf | isNothing (bufferLast buf) && interrupted -> do
+        Fetching False buf | bufferNext buf == 0 && interrupted -> do
             -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
             tell $ \out -> out{ cpuOutIRQAck = True }
