@@ -21,7 +21,7 @@ clashProject = ClashProject
     , clashFlags =
         [ "-iclash-utils/src-clash"
         , "-Wno-partial-type-signatures"
-        , "-fclash-inline-limit=50"
+        , "-fclash-inline-limit=10"
         , "-fclash-intwidth=32"
         ]
     , shakeDir = "clash-utils/shake"

@@ -14,6 +14,7 @@ import Hardware.Intel8080
 import Hardware.Intel8080.Microcode
 import Hardware.Intel8080.Decode
 import Hardware.Intel8080.ALU
+import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Except
@@ -21,12 +22,11 @@ import Control.Monad.Extra (whenM)
 
 import Cactus.Clash.Util
 import Cactus.Clash.CPU
+import Cactus.Clash.FetchM
 import Control.Monad.State
 import Data.Word
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromMaybe)
-
-import FetchM
 
 data ReadTarget
     = ToPC
@@ -72,15 +72,15 @@ initState = CPUState
     , interrupted = False
     }
 
-data CPUOut = CPUOut
-    { cpuOutMemAddr :: Addr
-    , cpuOutMemWrite :: Maybe Value
-    , cpuOutPortSelect :: Bool
-    , cpuOutIRQAck :: Bool
+data CPUOut f = CPUOut
+    { cpuOutMemAddr :: HKD f Addr
+    , cpuOutMemWrite :: HKD f (Maybe Value)
+    , cpuOutPortSelect :: HKD f Bool
+    , cpuOutIRQAck :: HKD f Bool
     }
-    deriving (Show)
+    deriving (Generic)
 
-defaultOut :: CPUState -> CPUOut
+defaultOut :: CPUState -> CPUOut Identity
 defaultOut CPUState{..} = CPUOut{..}
   where
     cpuOutMemAddr = pc
@@ -118,7 +118,7 @@ cpu = do
             goto WaitMemWrite
         WaitReadAddr0 nextAddr target -> do
             let lo = cpuInMem
-            tellAddr nextAddr
+            outAddr nextAddr
             goto $ WaitReadAddr1 target lo
         WaitReadAddr1 target lo -> do
             let hi = cpuInMem
@@ -133,7 +133,7 @@ cpu = do
         Fetching False buf | bufferNext buf == 0 && interrupted -> do
             -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
-            tell $ \out -> out{ cpuOutIRQAck = True }
+            output (unG mempty){ cpuOutIRQAck = pure True }
             goto $ Fetching True def
         Fetching interrupting buf -> do
             buf' <- remember buf <$> do
@@ -289,22 +289,22 @@ pushByte x = do
     sp <- gets sp
     pokeByte sp x
 
-tellAddr :: Addr -> M ()
-tellAddr addr = tell $ \cpuOut -> cpuOut{ cpuOutMemAddr = addr }
+outAddr :: Addr -> M ()
+outAddr addr = output (unG mempty){ cpuOutMemAddr = pure addr }
 
 tellPort :: Port -> M ()
-tellPort port = tell $ \cpuOut -> cpuOut{ cpuOutMemAddr = addr, cpuOutPortSelect = True }
+tellPort port = output (unG mempty){ cpuOutMemAddr = pure addr, cpuOutPortSelect = pure True }
   where
     addr = bitCoerce (port, port)
 
 tellWrite :: Value -> M ()
 tellWrite x = do
-    tell $ \cpuOut -> cpuOut{ cpuOutMemWrite = Just x }
+    output (unG mempty){ cpuOutMemWrite = pure $ Just x }
     goto WaitMemWrite
 
 pokeByte :: Addr -> Value -> M ()
 pokeByte addr x = do
-    tellAddr addr
+    outAddr addr
     tellWrite x
 
 pokeAddr :: Addr -> Addr -> M ()
@@ -319,7 +319,7 @@ peekByte addr = do
     phase <- gets prevPhase
     case phase of
         Fetching _ buf -> do
-            tellAddr addr
+            outAddr addr
             goto $ WaitMemRead
             abort
         WaitMemRead -> cpuInMem <$> input
@@ -331,7 +331,7 @@ popAddr target = do
 
 peekAddr :: Addr -> ReadTarget -> M ()
 peekAddr addr target = do
-    tellAddr addr
+    outAddr addr
     goto $ WaitReadAddr0 (addr + 1) target
 
 writePort :: Port -> Value -> M ()
