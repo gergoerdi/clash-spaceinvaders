@@ -1,4 +1,4 @@
-resolver: lts-13.3
+resolver: lts-13.24
 
 packages:
   - location:
@@ -11,7 +11,7 @@ extra-deps:
 #  - ghc-typelits-knownnat-0.6
 #  - ghc-typelits-extra-0.3
   - git: git@github.com:clash-lang/clash-compiler
-    commit: b8440afa1289593772c60e49f04ec5a000b59bc3
+    commit: 9a466bd9c08b8ff8fc215bfbca318873e6d57e4a
     subdirs:
     - clash-prelude
     - clash-lib
