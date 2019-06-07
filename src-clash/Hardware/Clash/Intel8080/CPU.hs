@@ -28,6 +28,9 @@ import Data.Word
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromMaybe)
 
+import Data.Generic.HKD
+import Control.Lens ((&), (.~))
+
 data ReadTarget
     = ToPC
     | ToRegPair RegPair
@@ -72,15 +75,15 @@ initState = CPUState
     , interrupted = False
     }
 
-data CPUOut f = CPUOut
-    { cpuOutMemAddr :: HKD f Addr
-    , cpuOutMemWrite :: HKD f (Maybe Value)
-    , cpuOutPortSelect :: HKD f Bool
-    , cpuOutIRQAck :: HKD f Bool
+data CPUOut = CPUOut
+    { cpuOutMemAddr :: Addr
+    , cpuOutMemWrite :: Maybe Value
+    , cpuOutPortSelect :: Bool
+    , cpuOutIRQAck :: Bool
     }
     deriving (Generic)
 
-defaultOut :: CPUState -> CPUOut Identity
+defaultOut :: CPUState -> CPUOut
 defaultOut CPUState{..} = CPUOut{..}
   where
     cpuOutMemAddr = pc
@@ -133,7 +136,7 @@ cpu = do
         Fetching False buf | bufferNext buf == 0 && interrupted -> do
             -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
-            output (unG mempty){ cpuOutIRQAck = pure True }
+            output $ mempty & field @"cpuOutIRQAck" .~ pure True
             goto $ Fetching True def
         Fetching interrupting buf -> do
             buf' <- remember buf <$> do
@@ -290,16 +293,19 @@ pushByte x = do
     pokeByte sp x
 
 outAddr :: Addr -> M ()
-outAddr addr = output (unG mempty){ cpuOutMemAddr = pure addr }
+outAddr addr = output $ mempty
+  & field @"cpuOutMemAddr" .~ pure addr
 
 tellPort :: Port -> M ()
-tellPort port = output (unG mempty){ cpuOutMemAddr = pure addr, cpuOutPortSelect = pure True }
+tellPort port = output $ mempty
+    & field @"cpuOutMemAddr" .~ pure addr
+    & field @"cpuOutPortSelect" .~ pure True
   where
     addr = bitCoerce (port, port)
 
 tellWrite :: Value -> M ()
 tellWrite x = do
-    output (unG mempty){ cpuOutMemWrite = pure $ Just x }
+    output $ mempty & field @"cpuOutMemWrite" .~ pure (Just x)
     goto WaitMemWrite
 
 pokeByte :: Addr -> Value -> M ()
