@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs, DataKinds #-}
 {-# LANGUAGE BinaryLiterals #-}
+{-# LANGUAGE TemplateHaskell, ViewPatterns #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Extra.Solver #-}
 module Hardware.Intel8080.Decode (fetchInstr) where
 
@@ -7,6 +8,7 @@ import Prelude ()
 import Data.Word
 import Clash.Prelude
 import Hardware.Intel8080
+import Cactus.Clash.TH.BitPattern
 
 decodeOp :: Reg -> Op
 decodeOp 6 = AddrHL
@@ -41,78 +43,79 @@ fetchInstr fetch = do
         rp = decodeRP r p
         rppp = decodeRPPP r p
         cond = decodeCond (d2 :> d1 :> d0 :> Nil)
-    case b1' of
-        0 :> 1 :> _ :> _ :> _ :> _ :> _ :> _ :> Nil -> return $ MOV d (Op s)
-        0 :> 0 :> _ :> _ :> _ :> 1 :> 1 :> 0 :> Nil -> MOV d <$> Imm <$> fetch
-        0 :> 0 :> _ :> _ :> 0 :> 0 :> 0 :> 1 :> Nil -> LXI rp <$> fetch16
+    case b1 of
+        $(bitPattern "01110110") -> return HLT
+        $(bitPattern "01......") -> return $ MOV d (Op s)
+        $(bitPattern "00...110") -> MOV d <$> Imm <$> fetch
+        $(bitPattern "00..0001") -> LXI rp <$> fetch16
 
-        0 :> 0 :> 1 :> 1 :> 1 :> 0 :> 1 :> 0 :> Nil -> LDA <$> fetch16
-        0 :> 0 :> 1 :> 1 :> 0 :> 0 :> 1 :> 0 :> Nil -> STA <$> fetch16
-        0 :> 0 :> 1 :> 0 :> 1 :> 0 :> 1 :> 0 :> Nil -> LHLD <$> fetch16
-        0 :> 0 :> 1 :> 0 :> 0 :> 0 :> 1 :> 0 :> Nil -> SHLD <$> fetch16
-        0 :> 0 :> _ :> _ :> 1 :> 0 :> 1 :> 0 :> Nil -> return $ LDAX rp
-        0 :> 0 :> _ :> _ :> 0 :> 0 :> 1 :> 0 :> Nil -> return $ STAX rp
-        1 :> 1 :> 1 :> 0 :> 1 :> 0 :> 1 :> 1 :> Nil -> return XCHG
+        $(bitPattern "00111010") -> LDA <$> fetch16
+        $(bitPattern "00110010") -> STA <$> fetch16
+        $(bitPattern "00101010") -> LHLD <$> fetch16
+        $(bitPattern "00100010") -> SHLD <$> fetch16
+        $(bitPattern "00..1010") -> return $ LDAX rp
+        $(bitPattern "00..0010") -> return $ STAX rp
+        $(bitPattern "11101011") -> return XCHG
 
-        1 :> 0 :> 0 :> 0 :> 0 :> _ :> _ :> _ :> Nil -> return $ ALU ADD (Op s)
-        1 :> 1 :> 0 :> 0 :> 0 :> 1 :> 1 :> 0 :> Nil -> ALU ADD <$> Imm <$> fetch
-        1 :> 0 :> 0 :> 0 :> 1 :> _ :> _ :> _ :> Nil -> return $ ALU ADC (Op s)
-        1 :> 1 :> 0 :> 0 :> 1 :> 1 :> 1 :> 0 :> Nil -> ALU ADC <$> Imm <$> fetch
+        $(bitPattern "10000...") -> return $ ALU ADD (Op s)
+        $(bitPattern "11000110") -> ALU ADD <$> Imm <$> fetch
+        $(bitPattern "10001...") -> return $ ALU ADC (Op s)
+        $(bitPattern "11001110") -> ALU ADC <$> Imm <$> fetch
 
-        1 :> 0 :> 0 :> 1 :> 0 :> _ :> _ :> _ :> Nil -> return $ ALU SUB (Op s)
-        1 :> 1 :> 0 :> 1 :> 0 :> 1 :> 1 :> 0 :> Nil -> ALU SUB <$> Imm <$> fetch
-        1 :> 0 :> 0 :> 1 :> 1 :> _ :> _ :> _ :> Nil -> return $ ALU SBB (Op s)
-        1 :> 1 :> 0 :> 1 :> 1 :> 1 :> 1 :> 0 :> Nil -> ALU SBB <$> Imm <$> fetch
+        $(bitPattern "10010...") -> return $ ALU SUB (Op s)
+        $(bitPattern "11010110") -> ALU SUB <$> Imm <$> fetch
+        $(bitPattern "10011...") -> return $ ALU SBB (Op s)
+        $(bitPattern "11011110") -> ALU SBB <$> Imm <$> fetch
 
-        1 :> 0 :> 1 :> 0 :> 0 :> _ :> _ :> _ :> Nil -> return $ ALU AND (Op s)
-        1 :> 1 :> 1 :> 0 :> 0 :> 1 :> 1 :> 0 :> Nil -> ALU AND <$> Imm <$> fetch
+        $(bitPattern "10100...") -> return $ ALU AND (Op s)
+        $(bitPattern "11100110") -> ALU AND <$> Imm <$> fetch
 
-        1 :> 0 :> 1 :> 1 :> 0 :> _ :> _ :> _ :> Nil -> return $ ALU OR (Op s)
-        1 :> 1 :> 1 :> 1 :> 0 :> 1 :> 1 :> 0 :> Nil -> ALU OR <$> Imm <$> fetch
+        $(bitPattern "10110...") -> return $ ALU OR (Op s)
+        $(bitPattern "11110110") -> ALU OR <$> Imm <$> fetch
 
-        1 :> 0 :> 1 :> 0 :> 1 :> _ :> _ :> _ :> Nil -> return $ ALU XOR (Op s)
-        1 :> 1 :> 1 :> 0 :> 1 :> 1 :> 1 :> 0 :> Nil -> ALU XOR <$> Imm <$> fetch
+        $(bitPattern "10101...") -> return $ ALU XOR (Op s)
+        $(bitPattern "11101110") -> ALU XOR <$> Imm <$> fetch
 
-        1 :> 0 :> 1 :> 1 :> 1 :> _ :> _ :> _ :> Nil -> return $ ALU CMP (Op s)
-        1 :> 1 :> 1 :> 1 :> 1 :> 1 :> 1 :> 0 :> Nil -> ALU CMP <$> Imm <$> fetch
+        $(bitPattern "10111...") -> return $ ALU CMP (Op s)
+        $(bitPattern "11111110") -> ALU CMP <$> Imm <$> fetch
 
-        0 :> 0 :> _ :> _ :> _ :> 1 :> 0 :> 0 :> Nil -> return $ INR d
-        0 :> 0 :> _ :> _ :> _ :> 1 :> 0 :> 1 :> Nil -> return $ DCR d
-        0 :> 0 :> _ :> _ :> 0 :> 0 :> 1 :> 1 :> Nil -> return $ INX rp
-        0 :> 0 :> _ :> _ :> 1 :> 0 :> 1 :> 1 :> Nil -> return $ DCX rp
+        $(bitPattern "00...100") -> return $ INR d
+        $(bitPattern "00...101") -> return $ DCR d
+        $(bitPattern "00..0011") -> return $ INX rp
+        $(bitPattern "00..1011") -> return $ DCX rp
 
-        0 :> 0 :> _ :> _ :> 1 :> 0 :> 0 :> 1 :> Nil -> return $ DAD rp
-        0 :> 0 :> 1 :> 0 :> 0 :> 1 :> 1 :> 1 :> Nil -> return DAA
+        $(bitPattern "00..1001") -> return $ DAD rp
+        $(bitPattern "00100111") -> return DAA
 
-        0 :> 0 :> 0 :> 0 :> 0 :> 1 :> 1 :> 1 :> Nil -> return RLC
-        0 :> 0 :> 0 :> 0 :> 1 :> 1 :> 1 :> 1 :> Nil -> return RRC
-        0 :> 0 :> 0 :> 1 :> 0 :> 1 :> 1 :> 1 :> Nil -> return RAL
-        0 :> 0 :> 0 :> 1 :> 1 :> 1 :> 1 :> 1 :> Nil -> return RAR
+        $(bitPattern "00000111") -> return RLC
+        $(bitPattern "00001111") -> return RRC
+        $(bitPattern "00010111") -> return RAL
+        $(bitPattern "00011111") -> return RAR
 
-        0 :> 0 :> 1 :> 0 :> 1 :> 1 :> 1 :> 1 :> Nil -> return CMA
-        0 :> 0 :> 1 :> 1 :> 1 :> 1 :> 1 :> 1 :> Nil -> return CMC
-        0 :> 0 :> 1 :> 1 :> 0 :> 1 :> 1 :> 1 :> Nil -> return STC
+        $(bitPattern "00101111") -> return CMA
+        $(bitPattern "00111111") -> return CMC
+        $(bitPattern "00110111") -> return STC
 
-        1 :> 1 :> 0 :> 0 :> 0 :> 0 :> 1 :> 1 :> Nil -> JMP <$> fetch16
-        1 :> 1 :> _ :> _ :> _ :> 0 :> 1 :> 0 :> Nil -> JMPIf cond <$> fetch16
-        1 :> 1 :> 0 :> 0 :> 1 :> 1 :> 0 :> 1 :> Nil -> CALL <$> fetch16
-        1 :> 1 :> _ :> _ :> _ :> 1 :> 0 :> 0 :> Nil -> CALLIf cond <$> fetch16
-        1 :> 1 :> 0 :> 0 :> 1 :> 0 :> 0 :> 1 :> Nil -> return RET
-        1 :> 1 :> _ :> _ :> _ :> 0 :> 0 :> 0 :> Nil -> return $ RETIf cond
+        $(bitPattern "11000011") -> JMP <$> fetch16
+        $(bitPattern "11...010") -> JMPIf cond <$> fetch16
+        $(bitPattern "11001101") -> CALL <$> fetch16
+        $(bitPattern "11...100") -> CALLIf cond <$> fetch16
+        $(bitPattern "11001001") -> return RET
+        $(bitPattern "11...000") -> return $ RETIf cond
 
-        1 :> 1 :> 0 :> 1 :> 1 :> 0 :> 1 :> 1 :> Nil -> IN <$> fetch
-        1 :> 1 :> 0 :> 1 :> 0 :> 0 :> 1 :> 1 :> Nil -> OUT <$> fetch
+        $(bitPattern "11011011") -> IN <$> fetch
+        $(bitPattern "11010011") -> OUT <$> fetch
 
-        1 :> 1 :> 1 :> 0 :> 1 :> 0 :> 0 :> 1 :> Nil -> return PCHL
-        1 :> 1 :> _ :> _ :> 0 :> 1 :> 0 :> 1 :> Nil -> return $ PUSH rppp
-        1 :> 1 :> _ :> _ :> 0 :> 0 :> 0 :> 1 :> Nil -> return $ POP rppp
-        1 :> 1 :> 1 :> 0 :> 0 :> 0 :> 1 :> 1 :> Nil -> return XTHL
-        1 :> 1 :> 1 :> 1 :> 1 :> 0 :> 0 :> 1 :> Nil -> return SPHL
+        $(bitPattern "11101001") -> return PCHL
+        $(bitPattern "11..0101") -> return $ PUSH rppp
+        $(bitPattern "11..0001") -> return $ POP rppp
+        $(bitPattern "11100011") -> return XTHL
+        $(bitPattern "11111001") -> return SPHL
 
-        1 :> 1 :> 1 :> 1 :> b :> 0 :> 1 :> 1 :> Nil -> return $ INT $ bitToBool b
-        1 :> 1 :> _ :> _ :> _ :> 1 :> 1 :> 1 :> Nil -> return $ RST $ bitCoerce $ d2 :> d1 :> d0 :> Nil
-        0 :> 1 :> 1 :> 1 :> 0 :> 1 :> 1 :> 0 :> Nil -> return HLT
-        0 :> 0 :> 0 :> 0 :> 0 :> 0 :> 0 :> 0 :> Nil -> return NOP
+        $(bitPattern "11111011") -> return $ INT True
+        $(bitPattern "11110011") -> return $ INT False
+        $(bitPattern "11...111") -> return $ RST $ bitCoerce (d2, d1, d0)
+        $(bitPattern "00000000") -> return NOP
         -- _ -> error $ printf "Unknown opcode: %02x" (fromIntegral b1 :: Word8)
         _ -> return NOP
 
