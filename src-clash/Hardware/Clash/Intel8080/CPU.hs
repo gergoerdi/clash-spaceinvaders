@@ -1,10 +1,7 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeSynonymInstances,FlexibleInstances #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
-
+{-# LANGUAGE OverloadedLabels #-}
 module Hardware.Clash.Intel8080.CPU where
 
 import Prelude ()
@@ -27,9 +24,6 @@ import Control.Monad.State
 import Data.Word
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromMaybe)
-
-import Data.Generic.HKD
-import Control.Lens ((&), (.~))
 
 data ReadTarget
     = ToPC
@@ -136,7 +130,7 @@ cpu = do
         Fetching False buf | bufferNext buf == 0 && interrupted -> do
             -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
-            output $ mempty & field @"cpuOutIRQAck" .~ pure True
+            output $ #cpuOutIRQAck True
             goto $ Fetching True def
         Fetching interrupting buf -> do
             buf' <- remember buf <$> do
@@ -293,19 +287,18 @@ pushByte x = do
     pokeByte sp x
 
 outAddr :: Addr -> M ()
-outAddr addr = output $ mempty
-  & field @"cpuOutMemAddr" .~ pure addr
+outAddr addr = output $ #cpuOutMemAddr addr
 
 tellPort :: Port -> M ()
-tellPort port = output $ mempty
-    & field @"cpuOutMemAddr" .~ pure addr
-    & field @"cpuOutPortSelect" .~ pure True
+tellPort port = output $
+    #cpuOutMemAddr addr <>
+    #cpuOutPortSelect True
   where
-    addr = bitCoerce (port, port)
+    addr = bitCoerce (port, port) :: Addr
 
 tellWrite :: Value -> M ()
 tellWrite x = do
-    output $ mempty & field @"cpuOutMemWrite" .~ pure (Just x)
+    output $ #cpuOutMemWrite (Just x)
     goto WaitMemWrite
 
 pokeByte :: Addr -> Value -> M ()
