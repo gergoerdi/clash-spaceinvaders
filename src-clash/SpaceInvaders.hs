@@ -86,10 +86,13 @@ topEntity = exposeClockReset board
                 y <- fromMaybe 0 <$> vgaY'
                 pure (bitCoerce (x, y) :: (Index VidSize, Unsigned 3))
 
-        (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
-          where
-            bg = pure (0x0, 0x0, 0x0)
-            fg = pure (0xf, 0xf, 0xf)
+        -- (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
+        --   where
+        --     bg = pure (0x0, 0x0, 0x0)
+        --     fg = pure (0xf, 0xf, 0xf)
+        vgaR = monochrome <$> pixel
+        vgaG = monochrome <$> pixel
+        vgaB = monochrome <$> pixel
 
 -- TODO: rewrite this for more clarity...
 shifter
