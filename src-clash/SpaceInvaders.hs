@@ -175,7 +175,7 @@ mainBoard irq = fmap (first fromIntegral) <$> vidWrite
     memWrite = packWrite memAddr (cpuOutMemWrite <$> cpuOut)
     vidWrite = fmap (first $ truncateB @_ @13) <$> memWrite
 
-    progROM addr = unpack <$> romFile (SNat @13) "image.hex" (truncateB <$> addr)
+    progROM addr = unpack <$> romFilePow2 @13 "image.hex" (truncateB <$> addr)
     mainRAM addr = blockRamPow2 (pure 0x00 :: Vec 0x0400 Value) (truncateB <$> addr) (fmap (first truncateB) <$> memWrite)
     vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
