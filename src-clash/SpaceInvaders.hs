@@ -25,9 +25,9 @@ import qualified Data.List as L
 -- CLaSH requires the clock period to be specified in picoseconds.
 type Dom25 = Dom "CLK_25MHZ" (FromHz 25_175_000)
 
-type Red   = Unsigned 4
-type Green = Unsigned 4
-type Blue  = Unsigned 4
+type Red   = Unsigned 8
+type Green = Unsigned 8
+type Blue  = Unsigned 8
 
 {-# NOINLINE topEntity #-}
 {-# ANN topEntity
@@ -99,8 +99,8 @@ topEntity = exposeClockReset board
         (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
           where
             bg, fg :: _ (Red, Green, Blue)
-            bg = pure (0x0, 0x0, 0x0)
-            fg = pure (0xf, 0xf, 0xf)
+            bg = pure minBound -- (0x0, 0x0, 0x0)
+            fg = pure maxBound -- (0xf, 0xf, 0xf)
 
 -- TODO: rewrite this for more clarity...
 shifter
