@@ -175,15 +175,21 @@ mainBoard irq = fmap (first fromIntegral) <$> vidWrite
     memWrite = packWrite memAddr (cpuOutMemWrite <$> cpuOut)
     vidWrite = fmap (first $ truncateB @_ @13) <$> memWrite
 
-    progROM addr = unpack <$> romFilePow2 @13 "image.hex" (truncateB <$> addr)
-    mainRAM addr = blockRamPow2 (pure 0x00 :: Vec 0x0400 Value) (truncateB <$> addr) (fmap (first truncateB) <$> memWrite)
+    progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
+    mainRAM addr = blockRamPow2 (pure 0x00 :: Vec 0x0400 Value) addr (fmap (first truncateB) <$> memWrite)
     vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
-    memRead = memoryMap $
-        UpTo 0x1fff progROM $
-        UpTo 0x23ff mainRAM $
-        UpTo 0x3fff (vidRAM . fmap truncateB) $
-        Default mainRAM
+    memRead = do
+        (addr :: Addr) <- memAddr
+        rom <- progROM $ truncateB <$> memAddr
+        ram <- mainRAM $ truncateB <$> (memAddr - 0x2000)
+        vid <- vidRAM $ truncateB <$> (memAddr - 0x2400)
+
+        pure $ case () of
+            _ | addr <= 0x1fff -> rom
+              | addr <= 0x23ff -> ram
+              | addr <= 0x3fff -> vid
+              | otherwise -> ram
 
     (interrupting, irqInstr) = interruptor irq (cpuOutIRQAck <$> cpuOut)
 
@@ -205,7 +211,7 @@ mainBoard irq = fmap (first fromIntegral) <$> vidWrite
         [ portRead
         , irqInstr
         ]
-        (memRead memAddr)
+        memRead
 
     cpuIn = do
         cpuInMem <- read
