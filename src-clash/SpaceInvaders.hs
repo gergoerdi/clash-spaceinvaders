@@ -22,6 +22,10 @@ import Control.Monad.State
 -- CLaSH requires the clock period to be specified in picoseconds.
 type Dom25 = Dom "CLK_25MHZ" (FromHz 25_175_000)
 
+type Red   = Unsigned 4
+type Green = Unsigned 4
+type Blue  = Unsigned 4
+
 {-# NOINLINE topEntity #-}
 {-# ANN topEntity
   (Synthesize
@@ -51,9 +55,9 @@ topEntity
     -> Signal Dom25 Bit
     -> ( ( Signal Dom25 Bit
         , Signal Dom25 Bit
-        , Signal Dom25 (Unsigned 4)
-        , Signal Dom25 (Unsigned 4)
-        , Signal Dom25 (Unsigned 4)
+        , Signal Dom25 Red
+        , Signal Dom25 Green
+        , Signal Dom25 Blue
         )
       )
 topEntity = exposeClockReset board
@@ -86,13 +90,11 @@ topEntity = exposeClockReset board
                 y <- fromMaybe 0 <$> vgaY'
                 pure (bitCoerce (x, y) :: (Index VidSize, Unsigned 3))
 
-        -- (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
-        --   where
-        --     bg = pure (0x0, 0x0, 0x0)
-        --     fg = pure (0xf, 0xf, 0xf)
-        vgaR = monochrome <$> pixel
-        vgaG = monochrome <$> pixel
-        vgaB = monochrome <$> pixel
+        (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
+          where
+            bg, fg :: _ (Red, Green, Blue)
+            bg = pure (0x0, 0x0, 0x0)
+            fg = pure (0xf, 0xf, 0xf)
 
 -- TODO: rewrite this for more clarity...
 shifter
