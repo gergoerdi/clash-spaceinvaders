@@ -42,6 +42,7 @@ type Blue  = Unsigned 4
           -- , PortProduct ""
             [ PortName "VGA_VSYNC"
             , PortName "VGA_HSYNC"
+            , PortName "VGA_DE"
             , PortName "VGA_RED"
             , PortName "VGA_GREEN"
             , PortName "VGA_BLUE"
@@ -55,6 +56,7 @@ topEntity
     -> Signal Dom25 Bit
     -> ( ( Signal Dom25 Bit
         , Signal Dom25 Bit
+        , Signal Dom25 Bool
         , Signal Dom25 Red
         , Signal Dom25 Green
         , Signal Dom25 Blue
@@ -62,11 +64,12 @@ topEntity
       )
 topEntity = exposeClockReset board
   where
-    board ps2Clk ps2Data = ((register high vgaVSync, register high vgaHSync, vgaR, vgaG, vgaB))
+    board ps2Clk ps2Data = ((register high vgaVSync, register high vgaHSync, register False vgaDE, vgaR, vgaG, vgaB))
       where
         VGADriver{..} = vgaDriver vga640x480at60
         vgaX' = (virtualX =<<) <$> vgaX
         vgaY' = (virtualY =<<) <$> vgaY
+        vgaDE = (isJust <$> vgaX) .&&. (isJust <$> vgaY)
 
         ps2 = decodePS2 $ samplePS2 PS2{..}
 
