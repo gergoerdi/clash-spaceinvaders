@@ -18,6 +18,9 @@ import Control.Monad (guard, msum)
 import Control.Arrow (first)
 import Control.Monad.State
 
+import Text.Printf
+import qualified Data.List as L
+
 -- | 25.175 MHz clock, needed for the VGA mode we use.
 -- CLaSH requires the clock period to be specified in picoseconds.
 type Dom25 = Dom "CLK_25MHZ" (FromHz 25_175_000)
@@ -82,7 +85,7 @@ topEntity = exposeClockReset board
                      , guard (y == Just 224) >> return 2
                      ]
 
-        (vidWrite) = mainBoard irq
+        (vidWrite, _) = mainBoard irq
         vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
         pixel = mux visible ((!) <$> vidRAM pixAddr <*> pixBit) (pure low)
@@ -168,13 +171,18 @@ interruptor irq ack = unbundle $ mealyState irqManager Nothing (bundle (irq, ack
         Nothing -> do
             return (False, Nothing)
 
+newtype Hex a = Hex{ getHex :: a }
+
+instance (Integral a) => PrintfArg (Hex a) where
+    formatArg = formatArg . fromIntegral @_ @Int . getHex
+
 mainBoard
     :: (HiddenClockReset domain gated synchronous)
     => Signal domain (Maybe (Unsigned 3))
-    -> (Signal domain (Maybe (Index VidSize, Value)))
-mainBoard irq = fmap (first fromIntegral) <$> vidWrite
+    -> (Signal domain (Maybe (Index VidSize, Value)), Signal domain (Addr, Addr, Addr, Value, Maybe Value))
+mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, memRead, fmap snd <$> memWrite))
   where
-    cpuOut = mealyState (runCPU defaultOut cpu) initState cpuIn
+    (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
 
     memAddr = cpuOutMemAddr <$> cpuOut
     memWrite = packWrite memAddr (cpuOutMemWrite <$> cpuOut)
@@ -283,3 +291,12 @@ truncateWrite = fmap $ first truncateB
 
 muxMaybes :: (Applicative f) => [f (Maybe a)] -> f a -> f a
 muxMaybes xs x0 = fromMaybe <$> x0 <*> (fmap msum . sequenceA $ xs)
+
+main :: IO ()
+main = do
+    let xs = L.tail $ sampleN 100_000 $ snd $ mainBoard $ pure Nothing
+    forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (pc, sp, a, r, w)) -> do
+        printf "%06d   %04x %04x %04x %02x %s\n" i (Hex pc) (Hex sp)
+          (Hex a)
+          (Hex r)
+          (maybe ".." (printf "%02x" . Hex) w)
