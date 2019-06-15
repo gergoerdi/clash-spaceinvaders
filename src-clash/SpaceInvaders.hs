@@ -88,13 +88,13 @@ topEntity = exposeClockReset board
         (vidWrite, _) = mainBoard irq
         vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
-        pixel = mux visible ((!) <$> vidRAM pixAddr <*> pixBit) (pure low)
+        pixel = mux visible ((!) <$> vidRAM pixAddr <*> register 0 pixBit) (pure low)
           where
             visible = isJust <$> vgaX' .&&. isJust <$> vgaY'
             (pixAddr, pixBit) = unbundle $ do
                 x <- fromMaybe 0 <$> vgaX'
                 y <- fromMaybe 0 <$> vgaY'
-                pure (bitCoerce (x, y) :: (Index VidSize, Unsigned 3))
+                pure (bitCoerce (y, x) :: (Index VidSize, Unsigned 3))
 
         (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
           where
@@ -273,12 +273,12 @@ type VidSize = VidX * VidY `Div` 8
 virtualX :: Unsigned 10 -> Maybe (Index VidX)
 virtualX x = do
     guard $ 64 <= x && x < 576
-    return $ fromIntegral $ x `shiftR` 1
+    return $ fromIntegral $ (x - 64) `shiftR` 1
 
 virtualY :: Unsigned 10 -> Maybe (Index VidY)
 virtualY y = do
     guard $ 16 <= y && y < 464
-    return $ fromIntegral $ y `shiftR` 1
+    return $ fromIntegral $ (y - 16) `shiftR` 1
 
 mapWriteAddr :: (a -> a') -> Maybe (a, d) -> Maybe (a', d)
 mapWriteAddr f = fmap $ first f
