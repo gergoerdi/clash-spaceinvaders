@@ -178,17 +178,29 @@ mainBoard irq = fmap (first fromIntegral) <$> vidWrite
 
     memAddr = cpuOutMemAddr <$> cpuOut
     memWrite = packWrite memAddr (cpuOutMemWrite <$> cpuOut)
-    vidWrite = fmap (first $ truncateB @_ @13) <$> memWrite
+
+    vidWrite :: _ (Maybe (Index VidSize, Value))
+    vidWrite = do
+        write <- memWrite
+        pure $ case write of
+            Just (addr, val) | 0x2400 <= addr && addr < 0x4000 -> Just (fromIntegral $ addr - 0x2400, val)
+            _ -> Nothing
+
+    ramWrite = do
+        write <- memWrite
+        pure $ case write of
+            Just (addr, val) | 0x2000 <= addr && addr < 0x2400 -> Just (fromIntegral $ addr - 0x2000, val)
+            _ -> Nothing
 
     progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
-    mainRAM addr = blockRamPow2 (pure 0x00 :: Vec 0x0400 Value) addr (fmap (first truncateB) <$> memWrite)
+    mainRAM addr = blockRamPow2 (pure 0x00 :: Vec 0x0400 Value) addr ramWrite
     vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
     memRead = do
-        (addr :: Addr) <- memAddr
+        (addr :: Addr) <- register 0 memAddr
         rom <- progROM $ truncateB <$> memAddr
         ram <- mainRAM $ truncateB <$> (memAddr - 0x2000)
-        vid <- vidRAM $ truncateB <$> (memAddr - 0x2400)
+        vid <- vidRAM $ fromIntegral <$> (memAddr - 0x2400)
 
         pure $ case () of
             _ | addr <= 0x1fff -> rom
