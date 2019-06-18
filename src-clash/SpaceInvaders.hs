@@ -294,7 +294,8 @@ muxMaybes xs x0 = fromMaybe <$> x0 <*> (fmap msum . sequenceA $ xs)
 
 main :: IO ()
 main = do
-    let xs = L.tail $ sampleN 100_000 $ snd $ mainBoard $ pure Nothing
+    let irq = fromList $ L.replicate 200_000 Nothing <> [Just 1] <> L.repeat Nothing
+    let xs = L.tail $ sampleN 250_000 $ snd $ mainBoard irq
     forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (pc, sp, a, r, w)) -> do
         printf "%06d   %04x %04x %04x %02x %s\n" i (Hex pc) (Hex sp)
           (Hex a)
