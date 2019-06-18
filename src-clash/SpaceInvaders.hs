@@ -216,7 +216,7 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
               | addr <= 0x3fff -> vid
               | otherwise -> ram
 
-    (interrupting, irqInstr) = interruptor irq (cpuOutIRQAck <$> cpuOut)
+    (interrupting, irqInstr) = interruptor irq (register False $ cpuOutIRQAck <$> cpuOut)
 
     -- TODO: rewrite for clarity
     port = do
@@ -225,7 +225,7 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
         pure $ guard selected >> Just (truncateB addr)
 
     -- TODO: rewrite for clarity
-    portCmd = do
+    portCmd = register Nothing $ do
         port <- port
         write <- cpuOutMemWrite <$> cpuOut
         pure $ (,) <$> port <*> (Just <$> write)
