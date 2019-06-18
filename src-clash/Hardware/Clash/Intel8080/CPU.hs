@@ -75,7 +75,7 @@ data CPUOut = CPUOut
     , cpuOutPortSelect :: Bool
     , cpuOutIRQAck :: Bool
     }
-    deriving (Generic)
+    deriving (Show, Generic)
 
 defaultOut :: CPUState -> CPUOut
 defaultOut CPUState{..} = CPUOut{..}
