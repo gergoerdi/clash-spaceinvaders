@@ -67,7 +67,7 @@ topEntity
       )
 topEntity = exposeClockReset board
   where
-    board ps2Clk ps2Data = ((register high vgaVSync, register high vgaHSync, register False vgaDE, vgaR, vgaG, vgaB))
+    board ps2Clk ps2Data = ((delay high vgaVSync, delay high vgaHSync, delay False vgaDE, vgaR, vgaG, vgaB))
       where
         VGADriver{..} = vgaDriver vga640x480at60
         vgaX' = (virtualX =<<) <$> vgaX
@@ -88,7 +88,7 @@ topEntity = exposeClockReset board
         (vidWrite, _) = mainBoard irq
         vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
-        pixel = mux visible ((!) <$> vidRAM pixAddr <*> register 0 pixBit) (pure low)
+        pixel = mux visible ((!) <$> vidRAM pixAddr <*> delay 0 pixBit) (pure low)
           where
             visible = isJust <$> vgaX' .&&. isJust <$> vgaY'
             (pixAddr, pixBit) = unbundle $ do
@@ -205,7 +205,7 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
     vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
     memRead = do
-        (addr :: Addr) <- register 0 memAddr
+        (addr :: Addr) <- delay 0 memAddr
         rom <- progROM $ truncateB <$> memAddr
         ram <- mainRAM $ truncateB <$> (memAddr - 0x2000)
         vid <- vidRAM $ fromIntegral <$> (memAddr - 0x2400)
@@ -216,7 +216,7 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
               | addr <= 0x3fff -> vid
               | otherwise -> ram
 
-    (interrupting, irqInstr) = interruptor irq (register False $ cpuOutIRQAck <$> cpuOut)
+    (interrupting, irqInstr) = interruptor irq (delay False $ cpuOutIRQAck <$> cpuOut)
 
     -- TODO: rewrite for clarity
     port = do
@@ -225,7 +225,7 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
         pure $ guard selected >> Just (truncateB addr)
 
     -- TODO: rewrite for clarity
-    portCmd = register Nothing $ do
+    portCmd = delay Nothing $ do
         port <- port
         write <- cpuOutMemWrite <$> cpuOut
         pure $ (,) <$> port <*> (Just <$> write)
@@ -256,7 +256,7 @@ memoryMap
     -> Signal domain b
 memoryMap mems addr = go mems
   where
-    addr' = register 0 addr
+    addr' = delay 0 addr
     go (UpTo lim mem mems) = mux (addr' .<. pure lim) (mem addr) $ go mems
     go (Default mem) = mem addr
 
