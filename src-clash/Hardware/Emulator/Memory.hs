@@ -2,6 +2,7 @@
 module Hardware.Emulator.Memory where
 
 import Data.Array.IO
+import Control.Monad.Trans
 import Data.IORef
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Foldable (traverse_)
@@ -12,10 +13,10 @@ data Mem m a d = MkMem
     , peekAt :: a -> m d
     }
 
-ram :: (Ix a, MArray arr d IO) => arr a d -> Mem IO a d
+ram :: (Ix a, MArray arr d IO, MonadIO m) => arr a d -> Mem m a d
 ram arr = MkMem
-    { pokeTo = writeArray arr
-    , peekAt = readArray arr
+    { pokeTo = \addr dat -> liftIO $ writeArray arr addr dat
+    , peekAt = liftIO . readArray arr
     }
 
 data SyncMem a d = MkSyncMem
