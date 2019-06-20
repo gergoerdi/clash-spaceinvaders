@@ -63,12 +63,12 @@ memTraced mem0 = do
                      modifyIORef trace (WriteEvent addr val:)
               , peekAt = \addr -> do
                      val <- peekAt mem0 addr
-                     modifyIORef trace (ReadEvent addr val:)
+                     -- modifyIORef trace (ReadEvent addr val:)
                      return val
               }
         takeTrace = do
             tr <- readIORef trace
-            print tr
-            writeIORef trace (init tr)
-            return $ last tr
+            -- print tr
+            writeIORef trace (L.init tr)
+            return $ L.last tr
     return (mem, MkMemTrace{..})
