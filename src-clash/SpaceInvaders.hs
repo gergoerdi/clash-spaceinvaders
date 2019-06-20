@@ -126,30 +126,32 @@ shifter newAmount newValue = startAt <$> amount <*> value
 
 -- We want port reads to potentially trigger effects!
 -- (e.g. MOS VIC-II clears sprite collision register on read)
+data PortCommand
+    = ReadPort Port
+    | WritePort Port Value
+    deriving (Generic, Undefined, Show)
+
 ports
     :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (Maybe (Port, Maybe Value))
+    => Signal domain (Maybe PortCommand)
     -> Signal domain (Maybe Value)
 ports cmd = do
     cmd <- cmd
     shifterResult <- shifterResult
-    pure $ case cmd of
-        Just (port, Nothing) -> case port of
-            0x00 -> Just 0x00
-            0x01 -> Just 0x00
-            0x02 -> Just 0x00
-            0x03 -> Just shifterResult
-        _ -> Nothing
+    pure $ do
+        ReadPort port <- cmd
+        return $ case port of
+            0x03 -> shifterResult
+            _    -> 0x00
   where
-    -- TODO: rewrite this for more clarity...
-    (newAmount, newValue) = unbundle $ do
-        cmd <- cmd
-        pure $ case cmd of
-            Just (0x02, x) -> (x, Nothing)
-            Just (0x04, x) -> (Nothing, x)
-            _ -> (Nothing, Nothing)
+    shifterResult = shifter (valueWrittenTo 0x02) (valueWrittenTo 0x04)
 
-    shifterResult = shifter newAmount newValue
+    valueWrittenTo port = do
+        cmd <- cmd
+        pure $ do
+            WritePort port' x <- cmd
+            guard $ port' == port
+            return x
 
 interruptor
     :: (HiddenClockReset domain gated synchronous)
@@ -228,7 +230,11 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
     portCmd = delay Nothing $ do
         port <- port
         write <- cpuOutMemWrite <$> cpuOut
-        pure $ (,) <$> port <*> (Just <$> write)
+        pure $ do
+            port <- port
+            pure $ case write of
+                Nothing -> ReadPort port
+                Just w -> WritePort port w
 
     portRead = ports portCmd
 
