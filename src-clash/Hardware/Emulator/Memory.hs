@@ -69,6 +69,6 @@ memTraced mem0 = do
         takeTrace = do
             tr <- readIORef trace
             print tr
-            writeIORef trace (init tr)
-            return $ last tr
+            writeIORef trace (L.init tr)
+            return $ L.last tr
     return (mem, MkMemTrace{..})
