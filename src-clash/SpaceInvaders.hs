@@ -15,6 +15,7 @@ import Cactus.Clash.Clock
 import Cactus.Clash.VGA
 import Cactus.Clash.PS2
 import Cactus.Clash.CPU
+import Cactus.Clash.TH.InitRAM
 import Data.Maybe (fromMaybe, isJust, fromJust)
 import Control.Monad (guard, msum)
 import Control.Arrow (first)
@@ -91,8 +92,8 @@ topEntity = exposeClockReset board
                      ]
 
         (vidWrite, _) = mainBoard dips coin p1 p2 irq
-        vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
+        vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
         pixel = mux visible ((!) <$> vidRAM pixAddr <*> delay 0 pixBit) (pure low)
           where
             visible = isJust <$> vgaX' .&&. isJust <$> vgaY'
@@ -219,8 +220,8 @@ mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portC
             _ -> Nothing
 
     progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
-    mainRAM addr = blockRamPow2 (pure 0x00 :: Vec 0x0400 Value) addr ramWrite
-    vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
+    mainRAM addr = $(blockRam_ 0x0400 8) (addr :: _ (Unsigned 10)) ramWrite
+    vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
 
     memRead = do
         (addr :: Addr) <- delay 0 memAddr
