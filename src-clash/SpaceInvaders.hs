@@ -76,7 +76,9 @@ topEntity = exposeClockReset board
         vgaY' = (virtualY =<<) <$> vgaY
         vgaDE = (isJust <$> vgaX) .&&. (isJust <$> vgaY)
 
-        ps2 = decodePS2 $ samplePS2 PS2{..}
+        ps2 = parseScanCode $ decodePS2 $ samplePS2 PS2{..}
+
+        (dips, coin, p1, p2) = inputs ps2
 
         irq = do
             startLine <- vgaStartLine
@@ -87,7 +89,7 @@ topEntity = exposeClockReset board
                      , guard (y == Just 224) >> return 2
                      ]
 
-        (vidWrite, _) = mainBoard irq
+        (vidWrite, _) = mainBoard dips coin p1 p2 irq
         vidRAM addr = blockRam (pure 0x00 :: Vec VidSize Value) addr vidWrite
 
         pixel = mux visible ((!) <$> vidRAM pixAddr <*> delay 0 pixBit) (pure low)
@@ -104,6 +106,42 @@ topEntity = exposeClockReset board
             bg = pure minBound -- (0x0, 0x0, 0x0)
             fg = pure maxBound -- (0xf, 0xf, 0xf)
 
+inputs
+    :: (HiddenClockReset domain gated synchronous)
+    => Signal domain (Maybe ScanCode)
+    -> (Signal domain (BitVector 8), Signal domain Bit, Signal domain JoyInput, Signal domain JoyInput)
+inputs scanCode = (dips, coin, p1, p2)
+  where
+    dips = regMaybe 0x00 $ do
+        scanCode <- scanCode
+        dips <- dips
+        pure $ do
+            ScanCode KeyPress key <- scanCode
+            idx <- do
+                -- TODO
+                Nothing
+            return $ complementBit dips idx
+
+    held code = regMaybe False $ do
+        scanCode <- scanCode
+        pure $ do
+            ScanCode ev code' <- scanCode
+            guard $ code' == code
+            return $ case ev of
+                KeyPress -> True
+                KeyRelease -> False
+
+    coin = boolToBit <$> held 0x021 -- 'c'
+
+    p1 = fmap bitCoerce . bundle $
+         ( held 0x05a -- 'Enter'
+         , held 0x114 -- 'Right CTRL'
+         , held 0x16b -- 'Left'
+         , held 0x174 -- 'Right'
+         )
+
+    p2 = pure 0b0000
+
 -- We want port reads to potentially trigger effects!
 -- (e.g. MOS VIC-II clears sprite collision register on read)
 data PortCommand
@@ -111,16 +149,29 @@ data PortCommand
     | WritePort Port Value
     deriving (Generic, Undefined, Show)
 
+type JoyInput = BitVector 4
+
 ports
     :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (Maybe PortCommand)
+    => Signal domain (BitVector 8)
+    -> Signal domain Bit
+    -> Signal domain JoyInput
+    -> Signal domain JoyInput
+    -> Signal domain (Maybe PortCommand)
     -> Signal domain (Maybe Value)
-ports cmd = do
+ports dips coin p1 p2 cmd = do
     cmd <- cmd
+    dips <- dips
+    coin <- coin
+    p1 <- p1
+    p2 <- p2
     shifterResult <- shifterResult
     pure $ do
         ReadPort port <- cmd
         return $ case port of
+            0x00 -> bitCoerce (dips!4, high, high, high, p1!1, p1!2, p1!3, high)
+            0x01 -> bitCoerce (coin, p2!0, p1!0, high, p1!1, p1!2, p1!3, high)
+            0x02 -> bitCoerce (dips!3, dips!5, low, dips!6, p2!1, p2!2, p2!3, dips!7)
             0x03 -> shifterResult
             _    -> 0x00
   where
@@ -140,9 +191,13 @@ instance (Integral a) => PrintfArg (Hex a) where
 
 mainBoard
     :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (Maybe (Unsigned 3))
+    => Signal domain (BitVector 8)
+    -> Signal domain Bit
+    -> Signal domain JoyInput
+    -> Signal domain JoyInput
+    -> Signal domain (Maybe (Unsigned 3))
     -> (Signal domain (Maybe (Index VidSize, Value)), Signal domain (Addr, Addr, Addr, Value, Maybe Value))
-mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, memRead, fmap snd <$> memWrite))
+mainBoard dips coin p1 p2 irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, memRead, fmap snd <$> memWrite))
   where
     (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
 
@@ -196,7 +251,7 @@ mainBoard irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, me
                 Nothing -> ReadPort port
                 Just w -> WritePort port w
 
-    portRead = ports portCmd
+    portRead = ports dips coin p1 p2 portCmd
 
     read = muxMaybes
         [ portRead
@@ -260,8 +315,12 @@ muxMaybes xs x0 = fromMaybe <$> x0 <*> (fmap msum . sequenceA $ xs)
 
 main :: IO ()
 main = do
+    let dips = fromList $ L.repeat 0b00000000
+        coin = fromList $ L.repeat low
+        p1 = fromList $ L.repeat 0b0000
+        p2 = fromList $ L.repeat 0b0000
     let irq = fromList $ L.replicate 200_000 Nothing <> [Just 1] <> L.repeat Nothing
-    let xs = L.tail $ sampleN 250_000 $ snd $ mainBoard irq
+    let xs = L.tail $ sampleN 250_000 $ snd $ mainBoard dips coin p1 p2 irq
     forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (pc, sp, a, r, w)) -> do
         printf "%06d   %04x %04x %04x %02x %s\n" i (Hex pc) (Hex sp)
           (Hex a)
