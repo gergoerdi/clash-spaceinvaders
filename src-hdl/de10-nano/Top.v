@@ -29,11 +29,6 @@ module Top(
 
 
 wire				reset_n;
-//Video Pattern Generator
-wire	[3:0]		vpg_disp_mode;
-wire				vpg_pclk;
-wire				vpg_de, vpg_hs, vpg_vs;
-wire	[23:0]	vpg_data;
 
 I2C_HDMI_Config u_I2C_HDMI_Config (
 	.iCLK(FPGA_CLK1_50),
