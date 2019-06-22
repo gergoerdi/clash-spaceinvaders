@@ -169,9 +169,9 @@ ports dips coin p1 p2 cmd = do
     pure $ do
         ReadPort port <- cmd
         return $ case port of
-            0x00 -> bitCoerce (dips!4, high, high, high, p1!1, p1!2, p1!3, high)
-            0x01 -> bitCoerce (coin, p2!0, p1!0, high, p1!1, p1!2, p1!3, high)
-            0x02 -> bitCoerce (dips!3, dips!5, low, dips!6, p2!1, p2!2, p2!3, dips!7)
+            0x00 -> bitCoerce (high, p1!3, p1!2, p1!1, high, high, high, dips!4)
+            0x01 -> bitCoerce (low, p1!3, p1!2, p1!1, high, p1!0, p2!0, coin)
+            0x02 -> bitCoerce (dips!7, p2!3, p2!2, p2!1, dips!6, low, dips!5, dips!3)
             0x03 -> shifterResult
             _    -> 0x00
   where
