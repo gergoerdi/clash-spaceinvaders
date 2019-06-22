@@ -196,8 +196,8 @@ mainBoard
     -> Signal domain JoyInput
     -> Signal domain JoyInput
     -> Signal domain (Maybe (Unsigned 3))
-    -> (Signal domain (Maybe (Index VidSize, Value)), Signal domain (Addr, Addr, Addr, Value, Maybe Value))
-mainBoard dips coin p1 p2 irq = (vidWrite, bundle (pc <$> cpuState, sp <$> cpuState, memAddr, memRead, fmap snd <$> memWrite))
+    -> (Signal domain (Maybe (Index VidSize, Value)), Signal domain (CPUState, CPUOut, Value, Maybe PortCommand, Maybe Value))
+mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portRead))
   where
     (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
 
@@ -315,14 +315,25 @@ muxMaybes xs x0 = fromMaybe <$> x0 <*> (fmap msum . sequenceA $ xs)
 
 main :: IO ()
 main = do
-    let dips = fromList $ L.repeat 0b00000000
+    let dips = fromList $ L.repeat 0x00
         coin = fromList $ L.repeat low
-        p1 = fromList $ L.repeat 0b0000
-        p2 = fromList $ L.repeat 0b0000
-    let irq = fromList $ L.replicate 200_000 Nothing <> [Just 1] <> L.repeat Nothing
-    let xs = L.tail $ sampleN 250_000 $ snd $ mainBoard dips coin p1 p2 irq
-    forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (pc, sp, a, r, w)) -> do
-        printf "%06d   %04x %04x %04x %02x %s\n" i (Hex pc) (Hex sp)
-          (Hex a)
+        p1 = fromList $ L.repeat 0x0
+        p2 = fromList $ L.repeat 0x0
+    let irq = fromList $ L.cycle $ mconcat
+              [ L.replicate 100_000 Nothing
+              , [ Just 1 ]
+              , L.replicate 100_000 Nothing
+              , [ Just 2 ]
+              ]
+    let xs = L.tail $ sampleN 1_000_000 $ snd $ mainBoard dips coin p1 p2 irq
+    forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (CPUState{..}, CPUOut{..}, r, portCmd, portRead)) -> do
+        printf "%06d   %04x %04x %04x %02x %s %s %s %s\n" i (Hex pc) (Hex sp)
+          (Hex cpuOutMemAddr)
           (Hex r)
-          (maybe ".." (printf "%02x" . Hex) w)
+          (maybe ".." (printf "%02x" . Hex) cpuOutMemWrite)
+          (case portCmd of
+                Nothing -> "...."
+                Just (ReadPort port) -> printf "<P%02x" (Hex port)
+                Just (WritePort port _) -> printf ">P%02x" (Hex port))
+          (if interrupted then "I" else ".")
+          (maybe ".." (printf "%02x" . Hex) portRead)
