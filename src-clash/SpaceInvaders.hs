@@ -82,11 +82,12 @@ topEntity = exposeClockReset board
 
         irq = do
             startLine <- vgaStartLine
-            y <- vgaY
+            endFrame <- vgaEndFrame
+            y <- vgaY'
             pure $ do
                 guard startLine
                 msum [ guard (y == Just 96)  >> return 1
-                     , guard (y == Just 224) >> return 2
+                     , guard endFrame >> return 2
                      ]
 
         (vidWrite, _) = mainBoard dips coin p1 p2 irq
