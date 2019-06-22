@@ -9,13 +9,13 @@ packages:
 extra-deps:
 #  - ghc-typelits-natnormalise-0.6.2
 #  - ghc-typelits-knownnat-0.6
-#  - ghc-typelits-extra-0.3
+#  - ghc-typelits-extra-0.3.1
   - git: git@github.com:clash-lang/clash-compiler
-    commit: 9a466bd9c08b8ff8fc215bfbca318873e6d57e4a
+    commit: 81163f7404a93531bc682760a0e3b81a227c6ca7
     subdirs:
     - clash-prelude
     - clash-lib
     - clash-ghc
 
   - git: https://github.com/clash-lang/ghc-typelits-extra
-    commit: a8de0b68b8216411cb862195354f251cd41bae50
+    commit: 145a1a524d9ee163887e7da2edc11cd2ff977ab8

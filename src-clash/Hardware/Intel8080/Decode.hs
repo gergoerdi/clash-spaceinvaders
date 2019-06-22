@@ -8,7 +8,6 @@ import Prelude ()
 import Data.Word
 import Clash.Prelude
 import Hardware.Intel8080
-import Cactus.Clash.TH.BitPattern
 
 decodeOp :: Reg -> Op
 decodeOp 6 = AddrHL
