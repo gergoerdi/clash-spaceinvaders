@@ -327,7 +327,12 @@ main = do
               ]
     let xs = L.tail $ sampleN 1_000_000 $ snd $ mainBoard dips coin p1 p2 irq
     forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (CPUState{..}, CPUOut{..}, r, portCmd, portRead)) -> do
-        printf "%06d   %04x %04x %04x %02x %s %s %s %s\n" i (Hex pc) (Hex sp)
+        printf "%06d   " i
+        printf "%04x %04x %02x   "
+          (Hex pc)
+          (Hex sp)
+          (Hex $ registers !! rA)
+        printf "%04x %02x %s %s %s %s\n"
           (Hex cpuOutMemAddr)
           (Hex r)
           (maybe ".." (printf "%02x" . Hex) cpuOutMemWrite)
