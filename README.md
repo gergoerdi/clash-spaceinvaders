@@ -3,6 +3,9 @@
 This is a CLaSH implementation of the 1978 Space Invaders arcade
 machine by Taito.
 
+[![Click to play YouTube video](https://img.youtube.com/vi/k-1MVmX2ytI/0.jpg)](https://www.youtube.com/watch?v=k-1MVmX2ytI)
+
+
 ## Hardware architecture
 
 * **CPU**: Intel 8080.
