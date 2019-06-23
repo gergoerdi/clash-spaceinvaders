@@ -84,10 +84,11 @@ topEntity = exposeClockReset board
         irq = do
             startLine <- vgaStartLine
             endFrame <- vgaEndFrame
+            y0 <- vgaY
             y <- vgaY'
             pure $ do
                 guard startLine
-                msum [ guard (y == Just 96)  >> return 1
+                msum [ guard (maybe False even y0 && y == Just 96)  >> return 1
                      , guard endFrame >> return 2
                      ]
 
