@@ -164,8 +164,8 @@ cpu = do
         a <- getReg rA
         x <- evalSrc src
         c <- getFlag fC
-        let (c', a') = alu fun c a x
-        updateFlags (Just c') a'
+        let (h', c', a') = alu fun c a x
+        updateFlags (Just (h', c')) a'
         case fun of
             CMP -> return ()
             _ -> setReg rA a'
@@ -191,16 +191,19 @@ cpu = do
             let (a1, _) = bitCoerce a :: (Unsigned 4, Unsigned 4)
             in if a1 > 9 || c then bitCoerce $ add a (0x60 :: Value) else (False, a)
         setFlag fC c
+        setFlag fA False
         setReg rA a
     exec (INR op) = do
         x <- evalSrc (Op op)
         let x' = x + 1
         updateFlags Nothing x'
+        setFlag fA $ truncateB @_ @4 x' == 0
         writeTo op x'
     exec (DCR op) = do
         x <- evalSrc (Op op)
         let x' = x - 1
         updateFlags Nothing x'
+        setFlag fA $ truncateB @_ @4 x' /= 0xf
         writeTo op x'
     exec (DAD rp) = do
         hl <- getRegPair rHL

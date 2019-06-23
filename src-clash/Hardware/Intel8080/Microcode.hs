@@ -4,7 +4,7 @@ module Hardware.Intel8080.Microcode where
 import Prelude ()
 import Clash.Prelude
 import Hardware.Intel8080
-import Data.Foldable (traverse_)
+import Data.Foldable (for_)
 
 class (Monad m) => Intel8080 m where
     getReg :: Reg -> m Value
@@ -54,12 +54,12 @@ writeTo AddrHL x = do
 writeTo (Reg r) x = setReg r x
 -}
 
-updateFlags :: (Intel8080 m) => Maybe Bool -> Value -> m ()
-updateFlags c x = do
-    traverse_ (setFlag fC) c
+updateFlags :: (Intel8080 m) => Maybe (Bool, Bool) -> Value -> m ()
+updateFlags ac x = do
+    for_ ac $ \(a, c) -> do
+        setFlag fA a
+        setFlag fC c
     setFlag fZ (x == 0)
-    -- TODO:
-    -- fA Auxillary carry
     setFlag fS (x `testBit` 7)
-    setFlag fP (odd $ popCount x)
+    setFlag fP (even $ popCount x)
     return ()
