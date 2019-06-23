@@ -31,7 +31,7 @@ clashProject = ClashProject
 main :: IO ()
 main = mainForCustom clashProject $ \ClashKit{..} -> do
     buildDir </> "image.hex" %> \out -> do
-        imageFile <- fromMaybe (error "missing IMAGE") <$> getConfig "IMAGE"
+        let imageFile = "image/SpaceInvaders.rom"
 
         bs <- liftIO $ BS.unpack <$> BS.readFile imageFile
         bs <- return $ L.take 0x2000 $ bs <> L.repeat 0
