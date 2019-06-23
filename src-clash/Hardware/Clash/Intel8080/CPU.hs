@@ -240,9 +240,11 @@ cpu = do
         setRegPair rDE hl
         setRegPair rHL de
     exec CMA = setReg rA =<< pure . complement =<< getReg rA
+    exec CMC = setFlag fC =<< pure . complement =<< getFlag fC
     exec STC = setFlag fC True
     exec (LXI rp xy) = setRegPair rp xy
     exec PCHL = setPC =<< getRegPair rHL
+    exec SPHL = setSP =<< getRegPair rHL
     exec (LHLD addr) = peekAddr addr (ToRegPair rHL)
     exec (SHLD addr) = pokeAddr addr =<< getRegPair rHL
     exec XTHL = do
