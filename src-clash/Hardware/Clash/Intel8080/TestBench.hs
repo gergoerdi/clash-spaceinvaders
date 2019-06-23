@@ -22,6 +22,7 @@ import Text.Printf
 import Data.Array.IO
 import Data.Char
 import Data.IORef
+import System.IO
 
 instance (KnownNat n) => Ix (Unsigned n) where
     range (a, b) = [a..b]
@@ -131,6 +132,8 @@ prelude = L.take 0x100 $ framework <> L.repeat 0x00
         ]
 
 runTest romFile = do
+    printf "Running tests from image %s\n" romFile
+
     bs <- BS.unpack <$> BS.readFile romFile
     let memL = L.take (2 ^ 16) $ prelude <> bs <> L.repeat 0x00
     memArr <- newListArray (minBound, maxBound) (fromIntegral <$> memL)
@@ -161,4 +164,11 @@ runTest romFile = do
 
 main :: IO ()
 main = do
-    runTest "image/testbench/TST8080.COM"
+    hSetBuffering stdout NoBuffering
+
+    mapM_ runTest
+      [ "image/testbench/TST8080.COM"
+      , "image/testbench/8080PRE.COM"
+      , "image/testbench/CPUTEST.COM"
+      -- , "image/testbench/8080EXM.COM"
+      ]
