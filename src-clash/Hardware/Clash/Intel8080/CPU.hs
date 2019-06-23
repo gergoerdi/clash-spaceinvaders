@@ -321,7 +321,7 @@ peekByte addr = do
     case phase of
         Fetching _ buf -> do
             outAddr addr
-            goto $ WaitMemRead
+            goto WaitMemRead
             abort
         WaitMemRead -> cpuInMem <$> input
 
