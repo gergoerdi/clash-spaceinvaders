@@ -108,6 +108,7 @@ cpu = do
 
     -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show phase)) $ return ()
     case phase of
+        Halted -> abort
         Init -> goto $ Fetching False def
         WaitMemWrite -> goto $ Fetching False def
         WaitWriteAddr1 nextAddr hi -> do
