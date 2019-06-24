@@ -33,6 +33,7 @@ data ReadTarget
 
 data Phase
     = Init
+    | Halted
     | Fetching Bool (Buffer 3 Value)
     | WaitReadAddr0 Addr ReadTarget
     | WaitReadAddr1 ReadTarget Value
@@ -150,6 +151,7 @@ cpu = do
             exec instrBuf
   where
     exec NOP = return ()
+    exec HLT = goto Halted
     exec (RST irq) = do
         pushAddr =<< getPC
         setPC $ fromIntegral irq `shiftL` 3
@@ -258,7 +260,6 @@ cpu = do
     exec (MOV dest src) = writeTo dest =<< evalSrc src
     exec (PUSH rp) = pushAddr =<< getRegPair rp
     exec (POP rp) = popAddr (ToRegPair rp)
-    exec instr = error $ show instr
 
 call :: Addr -> M ()
 call addr = do
