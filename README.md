@@ -12,7 +12,7 @@ machine by Taito.
 * **Video**: 256x224 monochrome at 60 FPS, backed by a 7168x8 bit
   framebuffer. IRQs triggered on lines 96 and 224. The screen was
   rotated 90 degrees to be in portrait orientation.
-* **Sound**: TODO
+* **Sound**: TI SN76477 connected to the CPU via two 8-bit ports
 * **Inputs**: coin deposit detector, two sets of buttons for starting the
   game, and moving and firing, for two-player mode.
 
@@ -27,6 +27,7 @@ machine by Taito.
 * **Framebuffer**: To keep the implementation simple, there is no
   CPU/video contention: framebuffer writes are simply forked into a
   second RAM that is read from only by the video system.
+* **Sound**: Unimplemented.
 * **Inputs**: PS/2 keyboard. `C` to deposit a coin, `Enter` to start
   1P game, and `Left` / `Right` / `RCtrl` to move and fire with P1.
 
@@ -75,4 +76,4 @@ script.
 * [Intel 8080 opcodes](http://www.classiccmp.org/dunfield/r/8080.txt)
 * [Monadic descriptions of CPUs in CLaSH](https://gergo.erdi.hu/blog/2018-09-30-composable_cpu_descriptions_in_c_ash,_and_wrap-up_of_retrochallenge_2018_09/)
 * [Papilio Pro FPGA dev board](https://papilio.cc/index.php?n=Papilio.PapilioPro)
-* [DE10-Nano](de10-nano.terasic.com/)
+* [DE10-Nano](http://de10-nano.terasic.com/)
