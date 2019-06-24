@@ -49,7 +49,7 @@ data CPUIn = CPUIn
     deriving (Show)
 
 data CPUState = CPUState
-    { phase, prevPhase :: Phase
+    { phase :: Phase
     , pc, sp :: Addr
     , instrBuf :: Instr
     , registers :: Vec 8 Value
@@ -61,7 +61,6 @@ data CPUState = CPUState
 initState :: CPUState
 initState = CPUState
     { phase = Init
-    , prevPhase = Init
     , pc = 0x0000
     , sp = 0x0000
     , instrBuf = NOP
@@ -267,7 +266,7 @@ call addr = do
     setPC addr
 
 goto :: Phase -> M ()
-goto ph = modify $ \s -> s{ prevPhase = phase s, phase = ph }
+goto ph = modify $ \s -> s{ phase = ph }
 
 getPC :: M Addr
 getPC = gets pc
@@ -321,7 +320,7 @@ pokeAddr addr x = do
 
 peekByte :: Addr -> M Value
 peekByte addr = do
-    phase <- gets prevPhase
+    phase <- getsStart phase
     case phase of
         Fetching _ buf -> do
             outAddr addr
@@ -346,7 +345,7 @@ writePort port value = do
 
 readPort :: Port -> M Value
 readPort port = do
-    phase <- gets prevPhase
+    phase <- getsStart phase
     case phase of
         Fetching _ buf -> do
             tellPort port
