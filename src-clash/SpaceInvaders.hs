@@ -22,18 +22,11 @@ import Control.Monad (guard, msum)
 import Control.Arrow (first)
 import Control.Monad.State
 
-import Clash.Signal.Internal (SResetPolarity(..))
-
 import Text.Printf
 import qualified Data.List as L
 
 -- | 25.175 MHz clock, needed for the VGA mode we use.
-type Dom25 = "CLK_25MHZ"
--- type ClockRate = FromHz 25_175_000
-type ClockRate = 39_721
-
-instance KnownDomain Dom25 ('DomainConfiguration Dom25 ClockRate 'Rising 'Asynchronous 'Defined 'ActiveHigh) where
-    knownDomain = SDomainConfiguration SSymbol SNat SRising SAsynchronous SDefined SActiveHigh
+createDomain vSystem{vTag="Dom25", vPeriod = fromHz 25_175_000}
 
 type Red   = Unsigned 8
 type Green = Unsigned 8
