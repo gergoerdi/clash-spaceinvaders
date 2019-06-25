@@ -218,18 +218,24 @@ mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portC
     memAddr = cpuOutMemAddr <$> cpuOut
     memWrite = packWrite memAddr (cpuOutMemWrite <$> cpuOut)
 
+    between (start, end) addr = do
+        guard $ start <= addr && addr < end
+        return $ fromIntegral $ addr - start
+
     vidWrite :: _ (Maybe (Index VidSize, Value))
     vidWrite = do
         write <- memWrite
-        pure $ case write of
-            Just (addr, val) | 0x2400 <= addr && addr < 0x4000 -> Just (fromIntegral $ addr - 0x2400, val)
-            _ -> Nothing
+        pure $ do
+            (addr, val) <- write
+            addr' <- between (0x2400, 0x4000) addr
+            return (addr', val)
 
     ramWrite = do
         write <- memWrite
-        pure $ case write of
-            Just (addr, val) | 0x2000 <= addr && addr < 0x2400 -> Just (fromIntegral $ addr - 0x2000, val)
-            _ -> Nothing
+        pure $ do
+            (addr, val) <- write
+            addr' <- between (0x2000, 0x2400) addr
+            return (addr', val)
 
     progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
     mainRAM addr = $(blockRam_ 0x0400 8) (addr :: _ (Unsigned 10)) ramWrite
