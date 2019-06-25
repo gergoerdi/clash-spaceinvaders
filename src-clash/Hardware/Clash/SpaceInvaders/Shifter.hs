@@ -27,10 +27,10 @@ import Clash.Prelude
 --   yzab
 shifter
     :: forall n. (KnownNat n, 1 <= n, CLog 2 n <= n)
-    => forall domain gated synchronous. (HiddenClockReset domain gated synchronous)
-    => Signal domain (Maybe (Unsigned n))
-    -> Signal domain (Maybe (Unsigned n))
-    -> Signal domain (Unsigned n)
+    => forall dom conf. (HiddenClockResetEnable dom conf)
+    => Signal dom (Maybe (Unsigned n))
+    -> Signal dom (Maybe (Unsigned n))
+    -> Signal dom (Unsigned n)
 shifter newOffset newValue = startAt <$> offset <*> value
   where
     offset = regMaybe 0 $ fmap (bitCoerce . truncateB @_ @(CLog 2 n) @(n - CLog 2 n)) <$> newOffset

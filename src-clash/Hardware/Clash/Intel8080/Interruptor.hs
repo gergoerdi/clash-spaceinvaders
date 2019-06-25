@@ -8,10 +8,10 @@ import Cactus.Clash.Util
 import Control.Monad.State
 
 interruptor
-    :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (Maybe (Unsigned 3))
-    -> Signal domain Bool
-    -> (Signal domain Bool, Signal domain (Maybe Value))
+    :: (HiddenClockResetEnable dom conf)
+    => Signal dom (Maybe (Unsigned 3))
+    -> Signal dom Bool
+    -> (Signal dom Bool, Signal dom (Maybe Value))
 interruptor irq ack = unbundle $ mealyState irqManager Nothing (bundle (irq, ack))
   where
     rst v = bitCoerce (0b11 :: Unsigned 2, v, 0b111 :: Unsigned 3)

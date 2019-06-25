@@ -2,6 +2,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 module SpaceInvaders where
 
 import Hardware.Intel8080
@@ -21,12 +22,18 @@ import Control.Monad (guard, msum)
 import Control.Arrow (first)
 import Control.Monad.State
 
+import Clash.Signal.Internal (SResetPolarity(..))
+
 import Text.Printf
 import qualified Data.List as L
 
 -- | 25.175 MHz clock, needed for the VGA mode we use.
--- CLaSH requires the clock period to be specified in picoseconds.
-type Dom25 = Dom "CLK_25MHZ" (FromHz 25_175_000)
+type Dom25 = "CLK_25MHZ"
+-- type ClockRate = FromHz 25_175_000
+type ClockRate = 39_721
+
+instance KnownDomain Dom25 ('DomainConfiguration Dom25 ClockRate 'Rising 'Asynchronous 'Defined 'ActiveHigh) where
+    knownDomain = SDomainConfiguration SSymbol SNat SRising SAsynchronous SDefined SActiveHigh
 
 type Red   = Unsigned 8
 type Green = Unsigned 8
@@ -39,6 +46,7 @@ type Blue  = Unsigned 8
     , t_inputs =
           [ PortName "CLK_25MHZ"
           , PortName "RESET"
+          , PortName "ENABLED"
           -- , PortName "RX"
           , PortName "PS2_CLK"
           , PortName "PS2_DATA"
@@ -56,8 +64,9 @@ type Blue  = Unsigned 8
           -- ]
     }) #-}
 topEntity
-    :: Clock Dom25 Source
-    -> Reset Dom25 Asynchronous
+    :: Clock Dom25
+    -> Reset Dom25
+    -> Enable Dom25
     -> Signal Dom25 Bit
     -> Signal Dom25 Bit
     -> ( ( Signal Dom25 Bit
@@ -68,7 +77,7 @@ topEntity
         , Signal Dom25 Blue
         )
       )
-topEntity = exposeClockReset board
+topEntity = exposeClockResetEnable board
   where
     board ps2Clk ps2Data = ((delay high vgaVSync, delay high vgaHSync, delay False vgaDE, vgaR, vgaG, vgaB))
       where
@@ -110,9 +119,9 @@ topEntity = exposeClockReset board
             fg = pure maxBound -- (0xf, 0xf, 0xf)
 
 inputs
-    :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (Maybe ScanCode)
-    -> (Signal domain (BitVector 8), Signal domain Bit, Signal domain JoyInput, Signal domain JoyInput)
+    :: (HiddenClockResetEnable dom conf)
+    => Signal dom (Maybe ScanCode)
+    -> (Signal dom (BitVector 8), Signal dom Bit, Signal dom JoyInput, Signal dom JoyInput)
 inputs scanCode = (dips, coin, p1, p2)
   where
     dips = regMaybe 0x00 $ do
@@ -155,13 +164,13 @@ data PortCommand
 type JoyInput = BitVector 4
 
 ports
-    :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (BitVector 8)
-    -> Signal domain Bit
-    -> Signal domain JoyInput
-    -> Signal domain JoyInput
-    -> Signal domain (Maybe PortCommand)
-    -> Signal domain (Maybe Value)
+    :: (HiddenClockResetEnable dom conf)
+    => Signal dom (BitVector 8)
+    -> Signal dom Bit
+    -> Signal dom JoyInput
+    -> Signal dom JoyInput
+    -> Signal dom (Maybe PortCommand)
+    -> Signal dom (Maybe Value)
 ports dips coin p1 p2 cmd = do
     cmd <- cmd
     dips <- dips
@@ -193,13 +202,15 @@ instance (Integral a) => PrintfArg (Hex a) where
     formatArg = formatArg . fromIntegral @_ @Int . getHex
 
 mainBoard
-    :: (HiddenClockReset domain gated synchronous)
-    => Signal domain (BitVector 8)
-    -> Signal domain Bit
-    -> Signal domain JoyInput
-    -> Signal domain JoyInput
-    -> Signal domain (Maybe (Unsigned 3))
-    -> (Signal domain (Maybe (Index VidSize, Value)), Signal domain (CPUState, CPUOut, Value, Maybe PortCommand, Maybe Value))
+    :: (HiddenClockResetEnable dom conf)
+    => Signal dom (BitVector 8)
+    -> Signal dom Bit
+    -> Signal dom JoyInput
+    -> Signal dom JoyInput
+    -> Signal dom (Maybe (Unsigned 3))
+    -> ( Signal dom (Maybe (Index VidSize, Value))
+       , Signal dom (CPUState, CPUOut, Value, Maybe PortCommand, Maybe Value)
+       )
 mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portRead))
   where
     (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
@@ -267,17 +278,17 @@ mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portC
         cpuInIRQ <- interrupting
         pure CPUIn{..}
 
-type MemRead domain a b = Signal domain (Unsigned a) -> Signal domain b
+type MemRead dom a b = Signal dom (Unsigned a) -> Signal dom b
 
-data MemSpec domain a b
-    = UpTo (Unsigned a) (MemRead domain a b) (MemSpec domain a b)
-    | Default (MemRead domain a b)
+data MemSpec dom a b
+    = UpTo (Unsigned a) (MemRead dom a b) (MemSpec dom a b)
+    | Default (MemRead dom a b)
 
 memoryMap
-    :: (KnownNat a, HiddenClockReset domain gated synchronous)
-    => MemSpec domain a b
-    -> Signal domain (Unsigned a)
-    -> Signal domain b
+    :: (KnownNat a, HiddenClockResetEnable dom conf)
+    => MemSpec dom a b
+    -> Signal dom (Unsigned a)
+    -> Signal dom b
 memoryMap mems addr = go mems
   where
     addr' = delay 0 addr
@@ -328,7 +339,7 @@ main = do
               , L.replicate 100_000 Nothing
               , [ Just 2 ]
               ]
-    let xs = L.tail $ sampleN 1_000_000 $ snd $ mainBoard dips coin p1 p2 irq
+    let xs = L.tail $ sampleN @Dom25 1_000_000 $ snd $ mainBoard dips coin p1 p2 irq
     forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (CPUState{..}, CPUOut{..}, r, portCmd, portRead)) -> do
         printf "%06d   " i
         printf "%04x %04x %02x   "
