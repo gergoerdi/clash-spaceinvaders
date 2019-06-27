@@ -72,6 +72,7 @@ script.
 
 * [Wikipedia](https://en.wikipedia.org/wiki/Space_Invaders)
 * [Computer Archeology's Space Invaders page](http://computerarcheology.com/Arcade/SpaceInvaders/)
+* [Original arcade machine schematics](https://www.robotron-2084.co.uk/manuals/invaders/taito_space_invader_l_shaped_board_schematics.pdf)
 * [Intel 8080 opcodes](http://pastraiser.com/cpu/i8080/i8080_opcodes.html)
 * [Intel 8080 opcodes](http://www.classiccmp.org/dunfield/r/8080.txt)
 * [Monadic descriptions of CPUs in CLaSH](https://gergo.erdi.hu/blog/2018-09-30-composable_cpu_descriptions_in_c_ash,_and_wrap-up_of_retrochallenge_2018_09/)
