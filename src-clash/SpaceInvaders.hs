@@ -41,18 +41,20 @@ type Blue  = Unsigned 8
           , PortName "RESET"
           , PortName "ENABLED"
           -- , PortName "RX"
-          , PortName "PS2_CLK"
-          , PortName "PS2_DATA"
+          , PortProduct "PS2"
+            [ PortName "CLK"
+            , PortName "DATA"
+            ]
           ]
-    , t_output = PortProduct ""
+    , t_output = -- PortProduct ""
           -- [ PortName "TX"
-          -- , PortProduct ""
-            [ PortName "VGA_VSYNC"
-            , PortName "VGA_HSYNC"
-            , PortName "VGA_DE"
-            , PortName "VGA_RED"
-            , PortName "VGA_GREEN"
-            , PortName "VGA_BLUE"
+            PortProduct "VGA"
+            [ PortName "VSYNC"
+            , PortName "HSYNC"
+            , PortName "DE"
+            , PortName "RED"
+            , PortName "GREEN"
+            , PortName "BLUE"
             ]
           -- ]
     }) #-}
@@ -60,8 +62,7 @@ topEntity
     :: Clock Dom25
     -> Reset Dom25
     -> Enable Dom25
-    -> Signal Dom25 Bit
-    -> Signal Dom25 Bit
+    -> (Signal Dom25 Bit, Signal Dom25 Bit)
     -> ( ( Signal Dom25 Bit
         , Signal Dom25 Bit
         , Signal Dom25 Bool
@@ -72,7 +73,7 @@ topEntity
       )
 topEntity = exposeClockResetEnable board
   where
-    board ps2Clk ps2Data = ((delay high vgaVSync, delay high vgaHSync, delay False vgaDE, vgaR, vgaG, vgaB))
+    board (ps2Clk, ps2Data) = ((delay high vgaVSync, delay high vgaHSync, delay False vgaDE, vgaR, vgaG, vgaB))
       where
         VGADriver{..} = vgaDriver vga640x480at60
         vgaX' = (virtualX =<<) <$> vgaX
