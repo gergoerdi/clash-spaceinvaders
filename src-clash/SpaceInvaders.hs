@@ -9,6 +9,7 @@ import Hardware.Intel8080
 import Hardware.Clash.Intel8080.CPU
 import Hardware.Clash.Intel8080.Interruptor
 import Hardware.Clash.SpaceInvaders.Shifter
+import Hardware.Clash.SpaceInvaders.ShiftOut
 
 import Clash.Prelude hiding (clkPeriod)
 import Cactus.Clash.Util
@@ -191,22 +192,23 @@ videoBoard vidRead =
                  , do guard endFrame; return 2
                  ]
 
-    vidAddrIdx = do
+    vidAddr = do
         x <- vgaX'
         y <- vgaY'
         pure $ do
-            (_, x) <- x
+            (newPixel, x) <- x
             (_, y) <- y
-            return (bitCoerce (y, x) :: (Index VidSize, Unsigned 3))
+            guard newPixel
+            let (addr, idx) = bitCoerce (y, x) :: (Index VidSize, Unsigned 3)
+            guard $ idx == 0
+            return addr
 
-    vidAddr = fmap fst <$> vidAddrIdx
-
-    pixel = do
-        vidAddrIdx <- delay Nothing vidAddrIdx
-        vidRead <- vidRead
-        pure $ fromMaybe low $ do
-            (_, idx) <- vidAddrIdx
-            return $ vidRead ! idx
+    pixel = shiftOut (maybe False fst <$> vgaX') $ do
+        refresh <- delay False $ isJust <$> vidAddr
+        newValue <- vidRead
+        pure $ do
+            guard refresh
+            return newValue
 
     (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
       where
@@ -223,7 +225,7 @@ mainBoard
          )
        , Signal dom (CPUState, CPUOut, Maybe Value, Maybe PortCommand, Maybe Value)
        )
-mainBoard inputs irq vidAddrVid = ((vidReadVid), bundle (cpuState, cpuOut, read, portCmd, portRead))
+mainBoard inputs irq vidAddrVid = ((vidRead), bundle (cpuState, cpuOut, read, portCmd, portRead))
   where
     (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
 
@@ -251,14 +253,10 @@ mainBoard inputs irq vidAddrVid = ((vidReadVid), bundle (cpuState, cpuOut, read,
 
     vidRead = vidRAM vidAddr
 
-    -- XXX
-    vidReadVid = $(blockRam_ 7168 8) (fromMaybe 0 <$> vidAddrVid) vidWrite
-
-    -- vidReadCPU = do
-    --     preempted <- delay False $ isJust <$> vidAddrVid
-    --     read <- vidRead
-    --     pure $ guard (not preempted) *> return read
-    vidReadCPU = Just <$> vidRead
+    vidReadCPU = do
+        preempted <- delay False $ isJust <$> vidAddrVid
+        read <- vidRead
+        pure $ guard (not preempted) *> return read
 
     vidAddrCPU = do
         addr <- memAddr
@@ -266,7 +264,7 @@ mainBoard inputs irq vidAddrVid = ((vidReadVid), bundle (cpuState, cpuOut, read,
             guard $ 0x2400 <= addr && addr < 0x4000
             pure $ fromIntegral $ addr - 0x2400
 
-    vidAddr = fromMaybe 0 <$> vidAddrCPU -- (mplus <$> vidAddrVid <*> vidAddrCPU)
+    vidAddr = fromMaybe 0 <$> (mplus <$> vidAddrVid <*> vidAddrCPU)
 
     memRead = do
         (addr :: Addr) <- delay 0 memAddr
@@ -379,14 +377,19 @@ main = do
               , L.replicate 100_000 Nothing
               , [ Just 2 ]
               ]
-    let xs = L.tail $ sampleN @Dom25 1_000_000 $ snd $ mainBoard inputs irq (pure Nothing)
-    forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (CPUState{..}, CPUOut{..}, r, portCmd, portRead)) -> do
+
+    let vidAddr = fromList $ L.cycle $ mconcat
+                  [ L.replicate 1 (Just addr) <> L.replicate 15 Nothing
+                  | addr <- [minBound..maxBound] ]
+
+    let xs = L.tail $ sampleN @Dom25 1_000_000 $ bundle $ mainBoard inputs irq vidAddr
+    forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (v, (CPUState{..}, CPUOut{..}, r, portCmd, portRead))) -> do
         printf "%06d   " i
         printf "%04x %04x %02x   "
           (Hex pc)
           (Hex sp)
           (Hex $ registers !! rA)
-        printf "%04x %s %s %s %s %s\n"
+        printf "%04x %s %s %s %s %s "
           (Hex cpuOutMemAddr)
           (maybe ".." (printf "%02x" . Hex) r)
           (maybe ".." (printf "%02x" . Hex) cpuOutMemWrite)
@@ -396,3 +399,6 @@ main = do
                 Just (WritePort port _) -> printf ">P%02x" (Hex port))
           (if interrupted then "I" else ".")
           (maybe ".." (printf "%02x" . Hex) portRead)
+        printf "%02x"
+          (Hex v)
+        putStrLn ""
