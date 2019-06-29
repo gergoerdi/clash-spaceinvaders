@@ -43,7 +43,7 @@ data Phase
     deriving (Show, Generic, Undefined)
 
 data CPUIn = CPUIn
-    { cpuInMem :: Value
+    { cpuInMem :: Maybe Value
     , cpuInIRQ :: Bool
     }
     deriving (Show)
@@ -99,6 +99,9 @@ acceptInterrupt irq = do
     allowed <- gets allowInterrupts
     when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
 
+readMem :: M Value
+readMem = maybe abort return =<< cpuInMem <$> input
+
 cpu :: M ()
 cpu = do
     CPUIn{..} <- input
@@ -115,12 +118,12 @@ cpu = do
             pokeByte nextAddr hi
             goto WaitMemWrite
         WaitReadAddr0 nextAddr target -> do
-            let lo = cpuInMem
+            lo <- readMem
             outAddr nextAddr
             goto $ WaitReadAddr1 target lo
         WaitReadAddr1 target lo -> do
-            let hi = cpuInMem
-                addr = bitCoerce (hi, lo)
+            hi <- readMem
+            let addr = bitCoerce (hi, lo)
             goto $ Fetching False def
             case target of
                 ToPC -> setPC addr
@@ -135,8 +138,9 @@ cpu = do
             goto $ Fetching True def
         Fetching interrupting buf -> do
             buf' <- remember buf <$> do
+                x <- readMem
                 unless interrupting $ setPC $ pc + 1
-                return cpuInMem
+                return x
             instr_ <- runFetchM buf' $ fetchInstr fetch
             instr <- case instr_ of
                 Left Underrun -> goto (Fetching interrupting buf') >> abort
@@ -325,7 +329,7 @@ peekByte addr = do
             outAddr addr
             goto WaitMemRead
             abort
-        WaitMemRead -> cpuInMem <$> input
+        WaitMemRead -> readMem
 
 popAddr :: ReadTarget -> M ()
 popAddr target = do
@@ -350,7 +354,7 @@ readPort port = do
             tellPort port
             goto WaitMemRead
             abort
-        WaitMemRead -> cpuInMem <$> input
+        WaitMemRead -> readMem
 
 evalSrc :: Src -> M Value
 evalSrc (Imm val) = return val

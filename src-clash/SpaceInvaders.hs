@@ -195,7 +195,7 @@ mainBoard
     => Signal dom Inputs
     -> Signal dom (Maybe (Unsigned 3))
     -> ( Signal dom (Maybe (Index VidSize, Value))
-       , Signal dom (CPUState, CPUOut, Value, Maybe PortCommand, Maybe Value)
+       , Signal dom (CPUState, CPUOut, Maybe Value, Maybe PortCommand, Maybe Value)
        )
 mainBoard inputs irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portRead))
   where
@@ -227,7 +227,7 @@ mainBoard inputs irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portR
     mainRAM addr = $(blockRam_ 0x0400 8) (addr :: _ (Unsigned 10)) ramWrite
     vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
 
-    memRead = do
+    memRead = fmap Just $ do
         (addr :: Addr) <- delay 0 memAddr
         rom <- progROM $ truncateB <$> memAddr
         ram <- mainRAM $ truncateB <$> (memAddr - 0x2000)
@@ -262,8 +262,8 @@ mainBoard inputs irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portR
     read = muxMaybes
         [ portRead
         , irqInstr
+        , memRead
         ]
-        memRead
 
     cpuIn = do
         cpuInMem <- read
@@ -316,8 +316,8 @@ truncateWrite
     -> (Maybe (f n, dat))
 truncateWrite = fmap $ first truncateB
 
-muxMaybes :: (Applicative f) => [f (Maybe a)] -> f a -> f a
-muxMaybes xs x0 = fromMaybe <$> x0 <*> (fmap msum . sequenceA $ xs)
+muxMaybes :: (Applicative f) => [f (Maybe a)] -> f (Maybe a)
+muxMaybes = fmap msum . sequenceA
 
 main :: IO ()
 main = do
@@ -339,9 +339,9 @@ main = do
           (Hex pc)
           (Hex sp)
           (Hex $ registers !! rA)
-        printf "%04x %02x %s %s %s %s\n"
+        printf "%04x %s %s %s %s %s\n"
           (Hex cpuOutMemAddr)
-          (Hex r)
+          (maybe ".." (printf "%02x" . Hex) r)
           (maybe ".." (printf "%02x" . Hex) cpuOutMemWrite)
           (case portCmd of
                 Nothing -> "...."
