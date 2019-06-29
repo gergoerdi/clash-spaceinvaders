@@ -81,8 +81,7 @@ topEntity = exposeClockResetEnable board
         vgaDE = (isJust <$> vgaX) .&&. (isJust <$> vgaY)
 
         ps2 = parseScanCode $ decodePS2 $ samplePS2 PS2{..}
-
-        (dips, coin, p1, p2) = inputs ps2
+        inputs = inputsFromKeyboard ps2
 
         irq = do
             startLine <- vgaStartLine
@@ -95,7 +94,7 @@ topEntity = exposeClockResetEnable board
                      , guard endFrame >> return 2
                      ]
 
-        (vidWrite, _) = mainBoard dips coin p1 p2 irq
+        (vidWrite, _) = mainBoard inputs irq
 
         vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
         pixel = mux visible ((!) <$> vidRAM pixAddr <*> delay 0 pixBit) (pure low)
@@ -112,11 +111,13 @@ topEntity = exposeClockResetEnable board
             bg = pure minBound -- (0x0, 0x0, 0x0)
             fg = pure maxBound -- (0xf, 0xf, 0xf)
 
-inputs
+type Inputs = (BitVector 8, Bit, JoyInput, JoyInput)
+
+inputsFromKeyboard
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe ScanCode)
-    -> (Signal dom (BitVector 8), Signal dom Bit, Signal dom JoyInput, Signal dom JoyInput)
-inputs scanCode = (dips, coin, p1, p2)
+    -> Signal dom Inputs
+inputsFromKeyboard scanCode = bundle (dips, coin, p1, p2)
   where
     dips = regMaybe 0x00 $ do
         scanCode <- scanCode
@@ -159,18 +160,12 @@ type JoyInput = BitVector 4
 
 ports
     :: (HiddenClockResetEnable dom)
-    => Signal dom (BitVector 8)
-    -> Signal dom Bit
-    -> Signal dom JoyInput
-    -> Signal dom JoyInput
+    => Signal dom Inputs
     -> Signal dom (Maybe PortCommand)
     -> Signal dom (Maybe Value)
-ports dips coin p1 p2 cmd = do
+ports inputs cmd = do
     cmd <- cmd
-    dips <- dips
-    coin <- coin
-    p1 <- p1
-    p2 <- p2
+    ~(dips, coin, p1, p2) <- inputs
     shifterResult <- shifterResult
     pure $ do
         ReadPort port <- cmd
@@ -197,15 +192,12 @@ instance (Integral a) => PrintfArg (Hex a) where
 
 mainBoard
     :: (HiddenClockResetEnable dom)
-    => Signal dom (BitVector 8)
-    -> Signal dom Bit
-    -> Signal dom JoyInput
-    -> Signal dom JoyInput
+    => Signal dom Inputs
     -> Signal dom (Maybe (Unsigned 3))
     -> ( Signal dom (Maybe (Index VidSize, Value))
        , Signal dom (CPUState, CPUOut, Value, Maybe PortCommand, Maybe Value)
        )
-mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portRead))
+mainBoard inputs irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portRead))
   where
     (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
 
@@ -265,7 +257,7 @@ mainBoard dips coin p1 p2 irq = (vidWrite, bundle (cpuState, cpuOut, read, portC
                 Nothing -> ReadPort port
                 Just w -> WritePort port w
 
-    portRead = ports dips coin p1 p2 portCmd
+    portRead = ports inputs portCmd
 
     read = muxMaybes
         [ portRead
@@ -333,13 +325,14 @@ main = do
         coin = fromList $ L.repeat low
         p1 = fromList $ L.repeat 0x0
         p2 = fromList $ L.repeat 0x0
+        inputs = bundle (dips, coin, p1, p2)
     let irq = fromList $ L.cycle $ mconcat
               [ L.replicate 100_000 Nothing
               , [ Just 1 ]
               , L.replicate 100_000 Nothing
               , [ Just 2 ]
               ]
-    let xs = L.tail $ sampleN @Dom25 1_000_000 $ snd $ mainBoard dips coin p1 p2 irq
+    let xs = L.tail $ sampleN @Dom25 1_000_000 $ snd $ mainBoard inputs irq
     forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (CPUState{..}, CPUOut{..}, r, portCmd, portRead)) -> do
         printf "%06d   " i
         printf "%04x %04x %02x   "
