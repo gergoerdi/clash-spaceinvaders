@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Hardware.Clash.SpaceInvaders.Shifter where
 
-import Hardware.Intel8080 (Value)
 import Clash.Prelude
 
 -- | This creates a register containing 2*n bits, with new n-bit
