@@ -73,43 +73,12 @@ topEntity
       )
 topEntity = exposeClockResetEnable board
   where
-    board (ps2Clk, ps2Data) = ((delay high vgaVSync, delay high vgaHSync, delay False vgaDE, vgaR, vgaG, vgaB))
+    board (ps2Clk, ps2Data) = vgaOut
       where
-        VGADriver{..} = vgaDriver vga640x480at60
-        vgaX' = (virtualX =<<) <$> vgaX
-        vgaY' = (virtualY =<<) <$> vgaY
-        vgaDE = (isJust <$> vgaX) .&&. (isJust <$> vgaY)
-
         ps2 = parseScanCode $ decodePS2 $ samplePS2 PS2{..}
         inputs = inputsFromKeyboard ps2
-
-        irq = do
-            startLine <- vgaStartLine
-            endFrame <- vgaEndFrame
-            y0 <- vgaY
-            y <- vgaY'
-            pure $ do
-                guard startLine
-                msum [ guard (maybe False even y0 && y == Just 96)  >> return 1
-                     , guard endFrame >> return 2
-                     ]
-
-        (vidWrite, _) = mainBoard inputs irq
-
-        vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
-        pixel = mux visible ((!) <$> vidRAM pixAddr <*> delay 0 pixBit) (pure low)
-          where
-            visible = isJust <$> vgaX' .&&. isJust <$> vgaY'
-            (pixAddr, pixBit) = unbundle $ do
-                x <- fromMaybe 0 <$> vgaX'
-                y <- fromMaybe 0 <$> vgaY'
-                pure (bitCoerce (y, x) :: (Index VidSize, Unsigned 3))
-
-        (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
-          where
-            bg, fg :: _ (Red, Green, Blue)
-            bg = pure minBound -- (0x0, 0x0, 0x0)
-            fg = pure maxBound -- (0xf, 0xf, 0xf)
+        (vidRead, _) = mainBoard inputs irq vidAddr
+        (vidAddr, irq, vgaOut) = videoBoard vidRead
 
 type Inputs = (BitVector 8, Bit, JoyInput, JoyInput)
 
@@ -190,54 +159,127 @@ newtype Hex a = Hex{ getHex :: a }
 instance (Integral a) => PrintfArg (Hex a) where
     formatArg = formatArg . fromIntegral @_ @Int . getHex
 
+videoBoard
+    :: (HiddenClockResetEnable dom)
+    => (ClockPeriod (KnownConf dom) ~ FromHz 25_175_000)
+    => Signal dom Value
+    -> ( Signal dom (Maybe (Index VidSize))
+       , Signal dom (Maybe Interrupt)
+       , ( Signal dom Bit
+         , Signal dom Bit
+         , Signal dom Bool
+         , Signal dom Red
+         , Signal dom Green
+         , Signal dom Blue
+         )
+       )
+videoBoard vidRead =
+    (vidAddr, irq, (delay high vgaVSync, delay high vgaHSync, delay False vgaDE, vgaR, vgaG, vgaB))
+  where
+    VGADriver{..} = vgaDriver vga640x480at60
+    vgaX' = (virtualX =<<) <$> vgaX
+    vgaY' = (virtualY =<<) <$> vgaY
+    vgaDE = (isJust <$> vgaX) .&&. (isJust <$> vgaY)
+
+    irq = do
+        startLine <- vgaStartLine
+        endFrame <- vgaEndFrame
+        y <- vgaY'
+        pure $ do
+            guard startLine
+            msum [ do (newLine, 96) <- y; guard newLine; return 1
+                 , do guard endFrame; return 2
+                 ]
+
+    vidAddrIdx = do
+        x <- vgaX'
+        y <- vgaY'
+        pure $ do
+            (_, x) <- x
+            (_, y) <- y
+            return (bitCoerce (y, x) :: (Index VidSize, Unsigned 3))
+
+    vidAddr = fmap fst <$> vidAddrIdx
+
+    pixel = do
+        vidAddrIdx <- delay Nothing vidAddrIdx
+        vidRead <- vidRead
+        pure $ fromMaybe low $ do
+            (_, idx) <- vidAddrIdx
+            return $ vidRead ! idx
+
+    (vgaR, vgaG, vgaB) = unbundle $ mux (bitToBool <$> pixel) fg bg
+      where
+        bg, fg :: _ (Red, Green, Blue)
+        bg = pure minBound -- (0x0, 0x0, 0x0)
+        fg = pure maxBound -- (0xf, 0xf, 0xf)
+
 mainBoard
     :: (HiddenClockResetEnable dom)
     => Signal dom Inputs
     -> Signal dom (Maybe (Unsigned 3))
-    -> ( Signal dom (Maybe (Index VidSize, Value))
+    -> Signal dom (Maybe (Index VidSize))
+    -> ( ( Signal dom Value
+         )
        , Signal dom (CPUState, CPUOut, Maybe Value, Maybe PortCommand, Maybe Value)
        )
-mainBoard inputs irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portRead))
+mainBoard inputs irq vidAddrVid = ((vidReadVid), bundle (cpuState, cpuOut, read, portCmd, portRead))
   where
     (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
 
     memAddr = cpuOutMemAddr <$> cpuOut
     memWrite = packWrite memAddr (cpuOutMemWrite <$> cpuOut)
 
-    between (start, end) addr = do
-        guard $ start <= addr && addr < end
-        return $ fromIntegral $ addr - start
-
     vidWrite :: _ (Maybe (Index VidSize, Value))
     vidWrite = do
         write <- memWrite
         pure $ do
             (addr, val) <- write
-            addr' <- between (0x2400, 0x4000) addr
+            addr' <- fromIntegral <$> between (0x2400, 0x4000) addr
             return (addr', val)
 
     ramWrite = do
         write <- memWrite
         pure $ do
             (addr, val) <- write
-            addr' <- between (0x2000, 0x2400) addr
+            addr' <- fromIntegral <$> between (0x2000, 0x2400) addr
             return (addr', val)
 
     progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
     mainRAM addr = $(blockRam_ 0x0400 8) (addr :: _ (Unsigned 10)) ramWrite
     vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
 
-    memRead = fmap Just $ do
+    vidRead = vidRAM vidAddr
+
+    -- XXX
+    vidReadVid = $(blockRam_ 7168 8) (fromMaybe 0 <$> vidAddrVid) vidWrite
+
+    -- vidReadCPU = do
+    --     preempted <- delay False $ isJust <$> vidAddrVid
+    --     read <- vidRead
+    --     pure $ guard (not preempted) *> return read
+    vidReadCPU = Just <$> vidRead
+
+    vidAddrCPU = do
+        addr <- memAddr
+        pure $ do
+            guard $ 0x2400 <= addr && addr < 0x4000
+            pure $ fromIntegral $ addr - 0x2400
+
+    vidAddr = fromMaybe 0 <$> vidAddrCPU -- (mplus <$> vidAddrVid <*> vidAddrCPU)
+
+    memRead = do
         (addr :: Addr) <- delay 0 memAddr
         rom <- progROM $ truncateB <$> memAddr
         ram <- mainRAM $ truncateB <$> (memAddr - 0x2000)
-        vid <- vidRAM $ fromIntegral <$> (memAddr - 0x2400)
+        vid <- vidReadCPU
 
+        preempted <- delay False $ isJust <$> vidAddrVid
         pure $ case () of
-            _ | addr <= 0x1fff -> rom
-              | addr <= 0x23ff -> ram
+            _ | addr <= 0x1fff -> return rom
+              | addr <= 0x23ff -> return ram
               | addr <= 0x3fff -> vid
-              | otherwise -> ram
+              | otherwise -> return ram
 
     (interrupting, irqInstr) = interruptor irq (delay False $ cpuOutIRQAck <$> cpuOut)
 
@@ -270,6 +312,11 @@ mainBoard inputs irq = (vidWrite, bundle (cpuState, cpuOut, read, portCmd, portR
         cpuInIRQ <- interrupting
         pure CPUIn{..}
 
+between :: (Ord a, Num a) => (a, a) -> a -> Maybe a
+between (start, end) addr = do
+    guard $ start <= addr && addr < end
+    return $ addr - start
+
 type MemRead dom a b = Signal dom (Unsigned a) -> Signal dom b
 
 data MemSpec dom a b
@@ -297,15 +344,15 @@ type VidX = 256
 type VidY = 224
 type VidSize = VidX * VidY `Div` 8
 
-virtualX :: Unsigned 10 -> Maybe (Index VidX)
+virtualX :: Unsigned 10 -> Maybe (Bool, Index VidX)
 virtualX x = do
-    guard $ 64 <= x && x < 576
-    return $ fromIntegral $ (x - 64) `shiftR` 1
+    (x', subpixel) <- bitCoerce @_ @(Unsigned _, Unsigned 1) <$> between (64, 576) x
+    return (subpixel == 0, {- maxBound - -} fromIntegral x')
 
-virtualY :: Unsigned 10 -> Maybe (Index VidY)
+virtualY :: Unsigned 10 -> Maybe (Bool, Index VidY)
 virtualY y = do
-    guard $ 16 <= y && y < 464
-    return $ fromIntegral $ (y - 16) `shiftR` 1
+    (y', subpixel) <- bitCoerce @_ @(Unsigned _, Unsigned 1) <$> between (16, 464) y
+    return (subpixel == 0, {- maxBound - -} fromIntegral y')
 
 mapWriteAddr :: (a -> a') -> Maybe (a, d) -> Maybe (a', d)
 mapWriteAddr f = fmap $ first f
@@ -332,7 +379,7 @@ main = do
               , L.replicate 100_000 Nothing
               , [ Just 2 ]
               ]
-    let xs = L.tail $ sampleN @Dom25 1_000_000 $ snd $ mainBoard inputs irq
+    let xs = L.tail $ sampleN @Dom25 1_000_000 $ snd $ mainBoard inputs irq (pure Nothing)
     forM_ (L.zip [(0 :: Int)..] xs) $ \(i, (CPUState{..}, CPUOut{..}, r, portCmd, portRead)) -> do
         printf "%06d   " i
         printf "%04x %04x %02x   "
