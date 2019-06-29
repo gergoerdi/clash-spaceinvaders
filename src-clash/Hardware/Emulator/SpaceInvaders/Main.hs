@@ -70,7 +70,7 @@ interrupt MkIOR{..} v = writeIORef irq $ Just $ NewIRQ rst
 cpuIO :: CPU CPUIn CPUState CPUOut () -> RWST IOR () CPUState IO ()
 cpuIO step = do
     MkIOR{..} <- ask
-    cpuInMem <- lift $ do
+    cpuInMem <- lift $ Just <$> do
         interrupting <- readIORef irqAck
         readingPort <- readIORef portSelect
         case readingPort of
