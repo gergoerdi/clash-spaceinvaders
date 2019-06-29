@@ -112,7 +112,7 @@ topEntity = exposeClockResetEnable board
             fg = pure maxBound -- (0xf, 0xf, 0xf)
 
 inputs
-    :: (HiddenClockResetEnable dom conf)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe ScanCode)
     -> (Signal dom (BitVector 8), Signal dom Bit, Signal dom JoyInput, Signal dom JoyInput)
 inputs scanCode = (dips, coin, p1, p2)
@@ -157,7 +157,7 @@ data PortCommand
 type JoyInput = BitVector 4
 
 ports
-    :: (HiddenClockResetEnable dom conf)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (BitVector 8)
     -> Signal dom Bit
     -> Signal dom JoyInput
@@ -195,7 +195,7 @@ instance (Integral a) => PrintfArg (Hex a) where
     formatArg = formatArg . fromIntegral @_ @Int . getHex
 
 mainBoard
-    :: (HiddenClockResetEnable dom conf)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (BitVector 8)
     -> Signal dom Bit
     -> Signal dom JoyInput
@@ -284,7 +284,7 @@ data MemSpec dom a b
     | Default (MemRead dom a b)
 
 memoryMap
-    :: (KnownNat a, HiddenClockResetEnable dom conf)
+    :: (KnownNat a, HiddenClockResetEnable dom)
     => MemSpec dom a b
     -> Signal dom (Unsigned a)
     -> Signal dom b

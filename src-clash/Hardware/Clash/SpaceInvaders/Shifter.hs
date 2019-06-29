@@ -27,7 +27,7 @@ import Clash.Prelude
 --   yzab
 shifter
     :: forall n. (KnownNat n, 1 <= n, CLog 2 n <= n)
-    => forall dom conf. (HiddenClockResetEnable dom conf)
+    => forall dom. (HiddenClockResetEnable dom)
     => Signal dom (Maybe (Unsigned n))
     -> Signal dom (Maybe (Unsigned n))
     -> Signal dom (Unsigned n)

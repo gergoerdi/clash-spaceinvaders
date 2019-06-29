@@ -8,7 +8,7 @@ import Cactus.Clash.Util
 import Control.Monad.State
 
 interruptor
-    :: (HiddenClockResetEnable dom conf)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe (Unsigned 3))
     -> Signal dom Bool
     -> (Signal dom Bool, Signal dom (Maybe Value))
