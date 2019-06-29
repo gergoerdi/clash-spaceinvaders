@@ -44,6 +44,7 @@ data Op
 type Value = Unsigned 8
 type Addr = Unsigned 16
 type Port = Unsigned 8
+type Interrupt = Unsigned 3
 
 data Src
     = Op Op
