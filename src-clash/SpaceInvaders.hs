@@ -28,6 +28,12 @@ import qualified Data.List as L
 
 -- | 25.175 MHz clock, needed for the VGA mode we use.
 createDomain vSystem{vTag="Dom25", vPeriod = fromHz 25_175_000}
+-- type Dom25 = "CLK_25"
+
+-- instance KnownDomain Dom25 where
+--     type KnownConf Dom25 = 'DomainConfiguration Dom25 (FromHz 25_175_000) 'Rising 'Asynchronous 'Defined 'ActiveHigh
+--     knownDomain = SDomainConfiguration SSymbol SNat SRising SAsynchronous SDefined SActiveHigh
+
 
 type Red   = Unsigned 8
 type Green = Unsigned 8
@@ -97,6 +103,9 @@ inputsFromKeyboard scanCode = bundle (dips, coin, p1, p2)
             idx <- do
                 -- TODO
                 Nothing
+                -- -- 'F1'..'F8'
+                -- guard $ 0x03b <= key && key <= 0x042
+                -- return $ fromIntegral $ key - 0x03b
             return $ complementBit dips idx
 
     held code = regMaybe False $ do
@@ -381,7 +390,10 @@ muxMaybes = fmap msum . sequenceA
 main :: IO ()
 main = do
     let dips = fromList $ L.repeat 0x00
-        coin = fromList $ L.repeat low
+        coin = fromList $ L.cycle $ mconcat
+               [ L.replicate 71 low
+               , L.replicate 71 high
+               ]
         p1 = fromList $ L.repeat 0x0
         p2 = fromList $ L.repeat 0x0
         inputs = bundle (dips, coin, p1, p2)
