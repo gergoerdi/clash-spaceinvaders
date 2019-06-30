@@ -52,6 +52,7 @@ data CPUState = CPUState
     { phase :: Phase
     , pc, sp :: Addr
     , instrBuf :: Instr
+    , addrBuf :: Addr
     , registers :: Vec 8 Value
     , allowInterrupts :: Bool
     , interrupted :: Bool
@@ -64,6 +65,7 @@ initState = CPUState
     , pc = 0x0000
     , sp = 0x0000
     , instrBuf = NOP
+    , addrBuf = 0x0000
     , registers = replace 1 0x02 $ pure 0x00
     , allowInterrupts = False
     , interrupted = False
@@ -100,7 +102,12 @@ acceptInterrupt irq = do
     when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
 
 readMem :: M Value
-readMem = maybe abort return =<< cpuInMem <$> input
+readMem = maybe retry return =<< cpuInMem <$> input
+  where
+    retry = do
+        put =<< getStart
+        tellAddr =<< gets addrBuf
+        abort
 
 cpu :: M ()
 cpu = do
@@ -119,7 +126,7 @@ cpu = do
             goto WaitMemWrite
         WaitReadAddr0 nextAddr target -> do
             lo <- readMem
-            outAddr nextAddr
+            tellAddr nextAddr
             goto $ WaitReadAddr1 target lo
         WaitReadAddr1 target lo -> do
             hi <- readMem
@@ -294,13 +301,15 @@ pushByte x = do
     sp <- gets sp
     pokeByte sp x
 
-outAddr :: Addr -> M ()
-outAddr addr = output $ #cpuOutMemAddr addr
+tellAddr :: Addr -> M ()
+tellAddr addr = do
+    modify $ \s -> s{ addrBuf = addr }
+    output $ #cpuOutMemAddr addr
 
 tellPort :: Port -> M ()
-tellPort port = output $
-    #cpuOutMemAddr addr <>
-    #cpuOutPortSelect True
+tellPort port = do
+    tellAddr addr
+    output $ #cpuOutPortSelect True
   where
     addr = bitCoerce (port, port) :: Addr
 
@@ -311,7 +320,7 @@ tellWrite x = do
 
 pokeByte :: Addr -> Value -> M ()
 pokeByte addr x = do
-    outAddr addr
+    tellAddr addr
     tellWrite x
 
 pokeAddr :: Addr -> Addr -> M ()
@@ -326,7 +335,7 @@ peekByte addr = do
     phase <- getsStart phase
     case phase of
         Fetching _ buf -> do
-            outAddr addr
+            tellAddr addr
             goto WaitMemRead
             abort
         WaitMemRead -> readMem
@@ -338,7 +347,7 @@ popAddr target = do
 
 peekAddr :: Addr -> ReadTarget -> M ()
 peekAddr addr target = do
-    outAddr addr
+    tellAddr addr
     goto $ WaitReadAddr0 (addr + 1) target
 
 writePort :: Port -> Value -> M ()
