@@ -216,6 +216,20 @@ videoBoard vidRead =
         bg = pure minBound -- (0x0, 0x0, 0x0)
         fg = pure maxBound -- (0xf, 0xf, 0xf)
 
+    -- vgaG = mux (bitToBool <$> pixel) (pure maxBound) (pure minBound)
+    -- -- vgaR = fromMaybe minBound <$> do
+    -- --     x <- vgaX'
+    -- --     y <- vgaY'
+    -- --     pure $ do
+    -- --         (newPixel, x) <- x
+    -- --         (_, y) <- y
+    -- --         (addr, idx) <- return (bitCoerce (y, x) :: (Index VidSize, Unsigned 3))
+    -- --         return $ fromIntegral idx `shiftL` 5
+
+    -- -- vgaG = vidRead -- maybe 0 fromIntegral <$> vidAddr
+    -- vgaB = maybe maxBound fromIntegral <$> vgaY
+    -- vgaR = mux (isJust <$> vidAddr) (pure maxBound) (pure minBound)
+
 mainBoard
     :: (HiddenClockResetEnable dom)
     => Signal dom Inputs
