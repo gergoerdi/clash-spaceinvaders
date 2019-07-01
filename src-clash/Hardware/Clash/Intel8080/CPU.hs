@@ -35,7 +35,6 @@ data Phase
     = Init
     | Halted
     | Fetching Bool (Buffer 3 Value)
-    | WaitMemWrite
     | WaitMemRead
     deriving (Show, Generic, Undefined)
 
@@ -117,7 +116,6 @@ cpu = do
     case phase of
         Halted -> abort
         Init -> goto $ Fetching False def
-        WaitMemWrite -> goto $ Fetching False def
         Fetching False buf | bufferNext buf == 0 && interrupted -> do
             -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
@@ -142,9 +140,6 @@ cpu = do
             exec instrBuf
   where
     exec (LDAX rp) = setReg rA =<< peekByte =<< getRegPair rp
-    exec (STAX rp) = do
-        addr <- getRegPair rp
-        pokeByte addr =<< getReg rA
     exec (DCX rp) = setRegPair rp =<< pure . subtract 1 =<< getRegPair rp
     exec (INX rp) = setRegPair rp =<< pure . (+ 1) =<< getRegPair rp
     exec _ = return ()
@@ -162,16 +157,6 @@ tellAddr :: Addr -> M ()
 tellAddr addr = do
     modify $ \s -> s{ addrBuf = addr }
     output $ #cpuOutMemAddr addr
-
-tellWrite :: Value -> M ()
-tellWrite x = do
-    output $ #cpuOutMemWrite (Just x)
-    goto WaitMemWrite
-
-pokeByte :: Addr -> Value -> M ()
-pokeByte addr x = do
-    tellAddr addr
-    tellWrite x
 
 peekByte :: Addr -> M Value
 peekByte addr = do
