@@ -47,45 +47,17 @@ type Blue  = Unsigned 8
           [ PortName "CLK_25MHZ"
           , PortName "RESET"
           , PortName "ENABLED"
-          -- , PortName "RX"
-          , PortProduct "PS2"
-            [ PortName "CLK"
-            , PortName "DATA"
-            ]
+          , PortName "CPUIN"
           ]
-    , t_output = -- PortProduct ""
-          -- [ PortName "TX"
-            PortProduct "VGA"
-            [ PortName "VSYNC"
-            , PortName "HSYNC"
-            , PortName "DE"
-            , PortName "RED"
-            , PortName "GREEN"
-            , PortName "BLUE"
-            ]
-          -- ]
+    , t_output = PortName "CPUOUT"
     }) #-}
 topEntity
     :: Clock Dom25
     -> Reset Dom25
     -> Enable Dom25
-    -> (Signal Dom25 Bit, Signal Dom25 Bit)
-    -> ( ( Signal Dom25 Bit
-        , Signal Dom25 Bit
-        , Signal Dom25 Bool
-        , Signal Dom25 Red
-        , Signal Dom25 Green
-        , Signal Dom25 Blue
-        )
-      )
-topEntity = exposeClockResetEnable board
-  where
-    board (ps2Clk, ps2Data) = vgaOut
-      where
-        ps2 = parseScanCode $ decodePS2 $ samplePS2 PS2{..}
-        inputs = inputsFromKeyboard ps2
-        (vidRead, _) = mainBoard inputs irq vidAddr
-        (vidAddr, irq, vgaOut) = videoBoard vidRead
+    -> Signal Dom25 CPUIn
+    -> Signal Dom25 CPUOut
+topEntity = exposeClockResetEnable cpuBoard
 
 type Inputs = (BitVector 8, Bit, JoyInput, JoyInput)
 
@@ -238,6 +210,12 @@ videoBoard vidRead =
     -- -- vgaG = vidRead -- maybe 0 fromIntegral <$> vidAddr
     -- vgaB = maybe maxBound fromIntegral <$> vgaY
     -- vgaR = mux (isJust <$> vidAddr) (pure maxBound) (pure minBound)
+
+cpuBoard
+    :: (HiddenClockResetEnable dom)
+    => Signal dom CPUIn
+    -> Signal dom CPUOut
+cpuBoard = mealyState (runCPU defaultOut cpu) initState
 
 mainBoard
     :: (HiddenClockResetEnable dom)

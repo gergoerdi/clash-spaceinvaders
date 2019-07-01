@@ -161,27 +161,6 @@ cpu = do
             goto $ Fetching False def
             exec instrBuf
   where
-    exec NOP = return ()
-    exec HLT = goto Halted
-    exec (RST irq) = do
-        pushAddr =<< getPC
-        setPC $ fromIntegral irq `shiftL` 3
-    exec (INT b) = setInt b
-    exec (JMP addr) = setPC addr
-    exec (JMPIf cond addr) = whenM (evalCond cond) $ setPC addr
-    exec (CALL addr) = call addr
-    exec (CALLIf cond addr) = whenM (evalCond cond) $ call addr
-    exec RET = popAddr ToPC
-    exec (RETIf cond) = whenM (evalCond cond) $ popAddr ToPC
-    exec (ALU fun src) = do
-        a <- getReg rA
-        x <- evalSrc src
-        c <- getFlag fC
-        let (h', c', a') = alu fun c a x
-        updateFlags (Just (h', c')) a'
-        case fun of
-            CMP -> return ()
-            _ -> setReg rA a'
     exec (LDA addr) = setReg rA =<< peekByte addr
     exec (STA addr) = pokeByte addr =<< getReg rA
     exec (LDAX rp) = setReg rA =<< peekByte =<< getRegPair rp
@@ -190,87 +169,7 @@ cpu = do
         pokeByte addr =<< getReg rA
     exec (DCX rp) = setRegPair rp =<< pure . subtract 1 =<< getRegPair rp
     exec (INX rp) = setRegPair rp =<< pure . (+ 1) =<< getRegPair rp
-    exec DAA = do
-        a <- getReg rA
-
-        ac <- getFlag fA
-        (ac, a) <- return $
-            let (_, a0) = bitCoerce a :: (Unsigned 4, Unsigned 4)
-            in if a0 > 9 || ac then bitCoerce $ add a (0x06 :: Value) else (False, a)
-        setFlag fA ac
-
-        c <- getFlag fC
-        (c, a) <- return $
-            let (a1, _) = bitCoerce a :: (Unsigned 4, Unsigned 4)
-            in if a1 > 9 || c then bitCoerce $ add a (0x60 :: Value) else (False, a)
-        setFlag fC c
-        setFlag fA False
-        setReg rA a
-    exec (INR op) = do
-        x <- evalSrc (Op op)
-        let x' = x + 1
-        updateFlags Nothing x'
-        setFlag fA $ truncateB @_ @4 x' == 0
-        writeTo op x'
-    exec (DCR op) = do
-        x <- evalSrc (Op op)
-        let x' = x - 1
-        updateFlags Nothing x'
-        setFlag fA $ truncateB @_ @4 x' /= 0xf
-        writeTo op x'
-    exec (DAD rp) = do
-        hl <- getRegPair rHL
-        arg <- getRegPair rp
-        let (c, hl') = bitCoerce $ add hl arg
-        setFlag fC c
-        setRegPair rHL hl'
-    exec RRC = do
-        a <- getReg rA
-        let c = a `testBit` 0
-            a' = a `rotateR` 1
-        setFlag fC c
-        setReg rA a'
-    exec RLC = do
-        a <- getReg rA
-        let c = a `testBit` 7
-            a' = a `rotateL` 1
-        setFlag fC c
-        setReg rA a'
-    exec RAR = do
-        a <- getReg rA
-        c <- getFlag fC
-        let a' = (if c then (`setBit` 7) else id) (a `shiftR` 1)
-            c' = a `testBit` 0
-        setFlag fC c'
-        setReg rA a'
-    exec RAL = do
-        a <- getReg rA
-        c <- getFlag fC
-        let a' = (if c then (`setBit` 0) else id) (a `shiftL` 1)
-            c' = a `testBit` 7
-        setFlag fC c'
-        setReg rA a'
-    exec XCHG = do
-        de <- getRegPair rDE
-        hl <- getRegPair rHL
-        setRegPair rDE hl
-        setRegPair rHL de
-    exec CMA = setReg rA =<< pure . complement =<< getReg rA
-    exec CMC = setFlag fC =<< pure . complement =<< getFlag fC
-    exec STC = setFlag fC True
-    exec (LXI rp xy) = setRegPair rp xy
-    exec PCHL = setPC =<< getRegPair rHL
-    exec SPHL = setSP =<< getRegPair rHL
-    exec (LHLD addr) = peekAddr addr (ToRegPair rHL)
-    exec (SHLD addr) = pokeAddr addr =<< getRegPair rHL
-    exec XTHL = do
-        hl <- getRegPair rHL
-        popAddr (SwapHL hl)
-    exec (OUT port) = writePort port =<< getReg rA
-    exec (IN port) = setReg rA =<< readPort port
-    exec (MOV dest src) = writeTo dest =<< evalSrc src
-    exec (PUSH rp) = pushAddr =<< getRegPair rp
-    exec (POP rp) = popAddr (ToRegPair rp)
+    exec _ = return ()
 
 call :: Addr -> M ()
 call addr = do
