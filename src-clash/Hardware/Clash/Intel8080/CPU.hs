@@ -141,8 +141,6 @@ cpu = do
             goto $ Fetching False def
             exec instrBuf
   where
-    exec (LDA addr) = setReg rA =<< peekByte addr
-    exec (STA addr) = pokeByte addr =<< getReg rA
     exec (LDAX rp) = setReg rA =<< peekByte =<< getRegPair rp
     exec (STAX rp) = do
         addr <- getRegPair rp
