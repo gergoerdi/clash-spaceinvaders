@@ -35,9 +35,6 @@ data Phase
     = Init
     | Halted
     | Fetching Bool (Buffer 3 Value)
-    | WaitReadAddr0 Addr ReadTarget
-    | WaitReadAddr1 ReadTarget Value
-    | WaitWriteAddr1 Addr Value
     | WaitMemWrite
     | WaitMemRead
     deriving (Show, Generic, Undefined)
@@ -121,23 +118,6 @@ cpu = do
         Halted -> abort
         Init -> goto $ Fetching False def
         WaitMemWrite -> goto $ Fetching False def
-        WaitWriteAddr1 nextAddr hi -> do
-            pokeByte nextAddr hi
-            goto WaitMemWrite
-        WaitReadAddr0 nextAddr target -> do
-            lo <- readMem
-            tellAddr nextAddr
-            goto $ WaitReadAddr1 target lo
-        WaitReadAddr1 target lo -> do
-            hi <- readMem
-            let addr = bitCoerce (hi, lo)
-            goto $ Fetching False def
-            case target of
-                ToPC -> setPC addr
-                ToRegPair rp -> setRegPair rp addr
-                SwapHL hl0 -> do
-                    setRegPair rHL addr
-                    pushAddr hl0
         Fetching False buf | bufferNext buf == 0 && interrupted -> do
             -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
@@ -171,11 +151,6 @@ cpu = do
     exec (INX rp) = setRegPair rp =<< pure . (+ 1) =<< getRegPair rp
     exec _ = return ()
 
-call :: Addr -> M ()
-call addr = do
-    pushAddr =<< getPC
-    setPC addr
-
 goto :: Phase -> M ()
 goto ph = modify $ \s -> s{ phase = ph }
 
@@ -185,34 +160,10 @@ getPC = gets pc
 setPC :: Addr -> M ()
 setPC pc = modify $ \s -> s{ pc = pc }
 
-getInt :: M Bool
-getInt = gets allowInterrupts
-
-setInt :: Bool -> M ()
-setInt allow = modify $ \s -> s{ allowInterrupts = allow }
-
-pushAddr :: Addr -> M ()
-pushAddr addr = do
-    sp <- modify (\s -> s{ sp = sp s - 2 }) *> gets sp
-    pokeAddr sp addr
-
-pushByte :: Value -> M ()
-pushByte x = do
-    modify $ \s -> s{ sp = sp s - 1 }
-    sp <- gets sp
-    pokeByte sp x
-
 tellAddr :: Addr -> M ()
 tellAddr addr = do
     modify $ \s -> s{ addrBuf = addr }
     output $ #cpuOutMemAddr addr
-
-tellPort :: Port -> M ()
-tellPort port = do
-    tellAddr addr
-    output $ #cpuOutPortSelect True
-  where
-    addr = bitCoerce (port, port) :: Addr
 
 tellWrite :: Value -> M ()
 tellWrite x = do
@@ -224,13 +175,6 @@ pokeByte addr x = do
     tellAddr addr
     tellWrite x
 
-pokeAddr :: Addr -> Addr -> M ()
-pokeAddr addr x = do
-    pokeByte addr lo
-    goto $ WaitWriteAddr1 (addr + 1) hi
-  where
-    (hi, lo) = bitCoerce x
-
 peekByte :: Addr -> M Value
 peekByte addr = do
     phase <- getsStart phase
@@ -240,39 +184,3 @@ peekByte addr = do
             goto WaitMemRead
             abort
         WaitMemRead -> readMem
-
-popAddr :: ReadTarget -> M ()
-popAddr target = do
-    sp <- gets sp <* modify (\s -> s{ sp = sp s + 2 })
-    peekAddr sp target
-
-peekAddr :: Addr -> ReadTarget -> M ()
-peekAddr addr target = do
-    tellAddr addr
-    goto $ WaitReadAddr0 (addr + 1) target
-
-writePort :: Port -> Value -> M ()
-writePort port value = do
-    tellPort port
-    tellWrite value
-
-readPort :: Port -> M Value
-readPort port = do
-    phase <- getsStart phase
-    case phase of
-        Fetching _ buf -> do
-            tellPort port
-            goto WaitMemRead
-            abort
-        WaitMemRead -> readMem
-
-evalSrc :: Src -> M Value
-evalSrc (Imm val) = return val
-evalSrc (Op (Reg r)) = getReg r
-evalSrc (Op AddrHL) = peekByte =<< getRegPair rHL
-
-writeTo :: Op -> Value -> M ()
-writeTo AddrHL x = do
-    addr <- getRegPair rHL
-    pokeByte addr x
-writeTo (Reg r) x = setReg r x
