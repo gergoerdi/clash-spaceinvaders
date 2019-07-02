@@ -10,7 +10,6 @@ import Clash.Prelude hiding (lift)
 import Hardware.Intel8080
 import Hardware.Intel8080.Microcode
 import Hardware.Intel8080.Decode
-import Hardware.Intel8080.ALU
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State
@@ -25,22 +24,14 @@ import Data.Word
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromMaybe)
 
-data ReadTarget
-    = ToPC
-    | ToRegPair RegPair
-    | SwapHL Addr
-    deriving (Show, Generic, Undefined)
-
 data Phase
     = Init
-    | Halted
     | Fetching Bool (Buffer 3 Value)
     | WaitMemRead
     deriving (Show, Generic, Undefined)
 
 data CPUIn = CPUIn
     { cpuInMem :: Maybe Value
-    , cpuInIRQ :: Bool
     }
     deriving (Show)
 
@@ -92,10 +83,6 @@ instance Intel8080 M where
     getSP = gets sp
     setSP addr = modify $ \s -> s{ sp = addr }
 
-acceptInterrupt :: Bool -> M ()
-acceptInterrupt irq = do
-    allowed <- gets allowInterrupts
-    when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
 
 readMem :: M Value
 readMem = maybe retry return =<< cpuInMem <$> input
@@ -108,16 +95,11 @@ readMem = maybe retry return =<< cpuInMem <$> input
 cpu :: M ()
 cpu = do
     CPUIn{..} <- input
-    acceptInterrupt cpuInIRQ
-
     CPUState{..} <- get
 
-    -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show phase)) $ return ()
     case phase of
-        Halted -> abort
         Init -> goto $ Fetching False def
         Fetching False buf | bufferNext buf == 0 && interrupted -> do
-            -- trace (show ("Interrupt accepted", pc)) $ return ()
             modify $ \s -> s{ allowInterrupts = False, interrupted = False }
             output $ #cpuOutIRQAck True
             goto $ Fetching True def
@@ -133,7 +115,6 @@ cpu = do
                 Right instr -> return instr
             modify $ \s -> s{ instrBuf = instr }
             goto $ Fetching False def
-            -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show instr)) $ return ()
             exec instr
         WaitMemRead -> do
             goto $ Fetching False def
