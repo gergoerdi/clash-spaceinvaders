@@ -8,7 +8,6 @@ import Prelude ()
 import Clash.Prelude hiding (lift)
 
 import Hardware.Intel8080
-import Hardware.Intel8080.Microcode
 import Hardware.Intel8080.Decode
 import Control.Monad.Identity
 import Control.Monad.Reader
@@ -76,13 +75,27 @@ defaultOut CPUState{..} = CPUOut{..}
 
 type M = CPU CPUIn CPUState CPUOut
 
-instance Intel8080 M where
-    getReg r = gets $ (!! r) . registers
-    setReg r v = modify $ \s@CPUState{..} -> s{ registers = replace r v registers }
+getSP :: M Addr
+getSP = gets sp
 
-    getSP = gets sp
-    setSP addr = modify $ \s -> s{ sp = addr }
+setSP :: Addr -> M ()
+setSP addr = modify $ \s -> s{ sp = addr }
 
+getReg :: Reg -> M Value
+getReg r = gets $ (!! r) . registers
+
+setReg :: Reg -> Value -> M ()
+setReg r v = modify $ \s@CPUState{..} -> s{ registers = replace r v registers }
+
+getRegPair :: RegPair -> M Addr
+getRegPair (Regs r1 r2) = bitCoerce <$> ((,) <$> getReg r1 <*> getReg r2)
+getRegPair SP = getSP
+
+setRegPair :: RegPair -> Addr -> M ()
+setRegPair (Regs r1 r2) x = setReg r1 hi >> setReg r2 lo
+  where
+    (hi, lo) = bitCoerce x
+setRegPair SP x = setSP x
 
 readMem :: M Value
 readMem = maybe retry return =<< cpuInMem <$> input
