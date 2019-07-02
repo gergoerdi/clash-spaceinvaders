@@ -91,10 +91,16 @@ type M = CPU CPUIn CPUState CPUOut
 
 instance Intel8080 M where
     getReg r = gets $ (!! r) . registers
+    {-# INLINE getReg #-}
+
     setReg r v = modify $ \s@CPUState{..} -> s{ registers = replace r v registers }
+    {-# INLINE setReg #-}
 
     getSP = gets sp
+    {-# INLINE getSP #-}
+
     setSP addr = modify $ \s -> s{ sp = addr }
+    {-# INLINE setSP #-}
 
 acceptInterrupt :: Bool -> M ()
 acceptInterrupt irq = do
