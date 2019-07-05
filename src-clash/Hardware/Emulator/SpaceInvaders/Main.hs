@@ -11,8 +11,8 @@ import Hardware.Emulator.Memory
 
 import Prelude ((^))
 import Clash.Prelude hiding ((!), delay, lift, (^))
-import Cactus.Clash.CPU
 import Control.Monad.RWS
+import Control.Monad.Trans.Maybe
 import qualified Data.ByteString as BS
 import qualified Data.List as L
 import Data.Function (fix)
@@ -43,58 +43,12 @@ instance (KnownNat n) => Ix (Unsigned n) where
     index (a, b) x = index (fromIntegral a, fromIntegral b) (fromIntegral x)
     inRange (a, b) x = inRange (fromIntegral a, fromIntegral b) (fromIntegral x)
 
--- cpuIO :: CPU CPUIn CPUState CPUOut () -> RWST IOR () CPUState IO ()
--- cpuIO step = do
---     MkIOR{..} <- ask
---     cpuInMem <- lift $ Just <$> do
---         interrupting <- readIORef irqAck
---         readingPort <- readIORef portSelect
---         case readingPort of
---             Just port -> do
---                 readPort port
---             _
---               | interrupting -> do
---                   putStrLn "Interrupting!"
---                   irqInstr <- do
---                       req <- readIORef irq
---                       case req of
---                           Just (QueuedIRQ op) -> return op
---                           _ -> return 0x00
---                   writeIORef irq Nothing
---                   printf "IRQ: 0x%02x\n" (fromIntegral irqInstr :: Word8)
---                   return irqInstr
---               | otherwise -> do
---                   readData mem
---     cpuInIRQ <- lift $ do
---         req <- readIORef irq
---         case req of
---             Just (NewIRQ op) -> do
---                 writeIORef irq $ Just $ QueuedIRQ op
---                 return True
---             _ -> return False
---     s <- get
---     let (CPUOut{..}, s') = runState (runCPU defaultOut step CPUIn{..}) s
---     put s'
---     lift $ latchAddress mem cpuOutMemAddr
---     lift $ if cpuOutPortSelect
---            then do
---                let port = truncateB cpuOutMemAddr
---                printf "Port IO: %02x\n" (fromIntegral port :: Word8)
---                writeIORef portSelect $ Just port
---                traverse_ (writePort port) cpuOutMemWrite
---            else do
---                writeIORef portSelect Nothing
---                traverse_ (writeData mem cpuOutMemAddr) cpuOutMemWrite
---     lift $ writeIORef irqAck cpuOutIRQAck
---     -- lift $ printf "<- %04x\n" (fromIntegral cpuOutMemAddr :: Word16)
---     return ()
-
 main :: IO ()
 main = do
     hSetBuffering stdout NoBuffering
 
-    -- romFile <- getDataFileName "image/invaders.rom"
-    romFile <- return "../emu/image/invaders.rom"
+    -- romFile <- getDataFileName "image/SpaceInvaders.rom"
+    romFile <- return "image/SpaceInvaders.rom"
     bs <- BS.unpack <$> BS.readFile romFile
     let memL = L.take (2 ^ 16) $ bs <> L.repeat 0x00
     memArr <- newListArray (minBound, maxBound) (fromIntegral <$> memL)
@@ -121,10 +75,14 @@ main = do
 
     let s = mkS
 
+    let execCPU s act = do
+            (s, _) <- execRWST (runMaybeT act) r s
+            return s
+
     let runSome target s = do
             let stepsPerTick = 1500
             (s, i) <- ($ (s, 0)) $ fix $ \loop (s, i) -> do
-                (s, _) <- execRWST (replicateM_ stepsPerTick step) r s
+                s <- execCPU s (replicateM_ stepsPerTick step)
                 now <- ticks
                 (if now < target then loop else return) (s, i + 1)
             printf "1 half-frame at %d KHz\n" (fromIntegral (i * stepsPerTick) * screenRefreshRate * 2 `div` 1000)
@@ -143,9 +101,9 @@ main = do
             target2 = target1 + (frameTime `div` 2)
 
         s <- lift $ runSome target1 s
-        (s, _) <- lift $ execRWST (interrupt $ RST 0x01) r s
+        s <- lift $ execCPU s (interrupt $ RST 0x01)
         s <- lift $ runSome target2 s
-        (s, _) <- lift $ execRWST (interrupt $ RST 0x02) r s
+        s <- lift $ execCPU s (interrupt $ RST 0x02)
 
         render videobuf
         return s
