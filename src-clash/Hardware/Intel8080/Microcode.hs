@@ -77,15 +77,18 @@ microcode (INT b) = [SetInt b]
 microcode CMA = [Get rA, Complement, Set rA]
 microcode CMC = [SetFlag fC Complement0]
 microcode STC = [SetFlag fC ConstTrue0]
-microcode (ALU alu src) = read <> [Compute RegA alu True True, UpdateFlags] <> write
+microcode (ALU alu src) = read <> [Compute RegA alu True True, UpdateFlags, Set rA]
   where
     read = case src of
         Imm x -> [Imm1 x]
         Op (Reg r) -> [Get r]
         Op AddrHL -> [Get2 rHL, ReadMem]
-    write = case alu of
-        CMP -> []
-        _ -> [Set rA]
+microcode (CMP src) = read <> [Compute RegA SUB True True, UpdateFlags]
+  where
+    read = case src of
+        Imm x -> [Imm1 x]
+        Op (Reg r) -> [Get r]
+        Op AddrHL -> [Get2 rHL, ReadMem]
 microcode RRC = [ShiftRotate RotateR]
 microcode RLC = [ShiftRotate RotateL]
 microcode RAR = [ShiftRotate ShiftR]

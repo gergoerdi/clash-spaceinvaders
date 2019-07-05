@@ -16,7 +16,6 @@ alu fun c x y = case fun of
     AND -> (testBit (x .|. y) 4, False, x .&. y)
     OR -> (False, False, x .|. y)
     XOR -> (False, False, x `xor` y)
-    CMP -> subC x y False
   where
     addC x y c =
         let xl, yl, xh, yh, zl, zh :: Unsigned 4

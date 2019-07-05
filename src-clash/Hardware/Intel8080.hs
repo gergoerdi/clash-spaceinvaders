@@ -51,7 +51,7 @@ data Src
     | Imm Value
     deriving (Eq, Ord, Show, Generic, Undefined)
 
-data ALU = ADD | ADC | SUB | SBB | AND | OR | XOR | CMP
+data ALU = ADD | ADC | SUB | SBB | AND | OR | XOR
     deriving (Eq, Ord, Show, Enum, Bounded, Generic, Undefined)
 
 data Cond = Cond Flag Bool
@@ -68,6 +68,7 @@ data Instr
     | STAX RegPair
     | XCHG
     | ALU ALU Src
+    | CMP Src
     | INR Op
     | DCR Op
     | INX RegPair

@@ -75,8 +75,8 @@ fetchInstr fetch = do
         $(bitPattern "10101...") -> return $ ALU XOR (Op s)
         $(bitPattern "11101110") -> ALU XOR <$> Imm <$> fetch
 
-        $(bitPattern "10111...") -> return $ ALU CMP (Op s)
-        $(bitPattern "11111110") -> ALU CMP <$> Imm <$> fetch
+        $(bitPattern "10111...") -> return $ CMP (Op s)
+        $(bitPattern "11111110") -> CMP <$> Imm <$> fetch
 
         $(bitPattern "00...100") -> return $ INR d
         $(bitPattern "00...101") -> return $ DCR d
