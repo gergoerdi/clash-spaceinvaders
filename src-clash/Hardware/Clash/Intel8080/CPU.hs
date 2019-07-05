@@ -152,9 +152,7 @@ cpu = do
   where
     exec NOP = return ()
     exec HLT = goto Halted
-    exec (RST irq) = do
-        pushAddr =<< getPC
-        setPC $ fromIntegral irq `shiftL` 3
+    exec (RST irq) = call $ fromIntegral irq `shiftL` 3
     exec (INT b) = setInt b
     exec (JMP addr) = setPC addr
     exec (JMPIf cond addr) = whenM (evalCond cond) $ setPC addr
