@@ -5,9 +5,9 @@
 module Hardware.Emulator.Intel8080.CPU where
 
 import Hardware.Intel8080
+import Hardware.Intel8080.ISA
 import Hardware.Intel8080.ALU
 import Hardware.Intel8080.Decode
-import Hardware.Intel8080.Microcode
 import Hardware.Emulator.Memory
 
 import Prelude ()
