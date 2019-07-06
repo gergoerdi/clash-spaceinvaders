@@ -63,7 +63,7 @@ testBench stepCPU = do
     MkTestBenchR{..} <- ask
     s <- use _2
 
-    cpuInMem <- do
+    cpuInMem <- Just <$> do
         port <- use $ _1.selectedPort
         ack <- use $ _1.irqAck
         case port of

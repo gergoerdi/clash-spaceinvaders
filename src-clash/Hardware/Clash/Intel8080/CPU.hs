@@ -20,7 +20,6 @@ import Control.Monad.Extra (whenM)
 
 import Cactus.Clash.Util
 import Cactus.Clash.CPU
-import Cactus.Clash.FetchM
 import Control.Monad.State
 import Data.Word
 import Data.Foldable (for_, traverse_)
@@ -35,12 +34,8 @@ data ReadTarget
 data Phase
     = Init
     | Halted
-    | Fetching Bool (Buffer 3 Value)
-    | WaitReadAddr0 Addr ReadTarget
-    | WaitReadAddr1 ReadTarget Value
-    | WaitWriteAddr1 Addr Value
-    | WaitMemWrite
-    | WaitMemRead
+    | Fetching Bool
+    | Executing (Index MicroLen)
     deriving (Show, Generic, Undefined)
 
 data CPUIn = CPUIn
@@ -52,11 +47,13 @@ data CPUIn = CPUIn
 data CPUState = CPUState
     { phase :: Phase
     , pc, sp :: Addr
-    , instrBuf :: Instr
-    , addrBuf :: Addr
     , registers :: Vec 8 Value
     , allowInterrupts :: Bool
     , interrupted :: Bool
+    , instrBuf :: Instr
+    , valueBuf :: Value
+    , addrBuf :: Addr
+    , portSelect :: Bool
     }
     deriving (Show, Generic, Undefined)
 
@@ -65,11 +62,13 @@ initState = CPUState
     { phase = Init
     , pc = 0x0000
     , sp = 0x0000
-    , instrBuf = NOP
-    , addrBuf = 0x0000
     , registers = replace 1 0x02 $ pure 0x00
     , allowInterrupts = False
     , interrupted = False
+    , instrBuf = NOP
+    , valueBuf = 0x00
+    , addrBuf = 0x0000
+    , portSelect = False
     }
 
 data CPUOut = CPUOut
@@ -83,7 +82,7 @@ data CPUOut = CPUOut
 defaultOut :: CPUState -> CPUOut
 defaultOut CPUState{..} = CPUOut{..}
   where
-    cpuOutMemAddr = pc
+    cpuOutMemAddr = addrBuf
     cpuOutMemWrite = Nothing
     cpuOutPortSelect = False
     cpuOutIRQAck = False
@@ -103,184 +102,200 @@ instance Intel8080 M where
     setSP addr = modify $ \s -> s{ sp = addr }
     {-# INLINE setSP #-}
 
-acceptInterrupt :: Bool -> M ()
-acceptInterrupt irq = do
+acceptInterrupt :: M Bool
+acceptInterrupt = do
+    irq <- inputs cpuInIRQ
     allowed <- gets allowInterrupts
     when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
+    gets interrupted
 
-readMem :: M Value
-readMem = maybe retry return =<< cpuInMem <$> input
+inputs f = f <$> input
+
+readByte :: M Value
+readByte = maybe retry return =<< inputs cpuInMem
   where
-    retry = do
-        put =<< getStart
-        tellAddr =<< gets addrBuf
-        abort
+    retry = abort
+
+fetch :: M Value
+fetch = do
+    x <- readByte
+    pc' <- (+ 1) <$> getPC
+    setPC pc'
+    tellAddr pc'
+    return x
+
+popByte :: M Value
+popByte = do
+    x <- readByte
+    sp <- getSP
+    setSP $ sp + 1
+    tellAddr sp
+    return x
 
 cpu :: M ()
 cpu = do
-    CPUIn{..} <- input
-    acceptInterrupt cpuInIRQ
+    interrupted <- acceptInterrupt
+    phase <- gets phase
 
-    CPUState{..} <- get
-
-    -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show phase)) $ return ()
+    -- traceShow phase $ return ()
     case phase of
         Halted -> abort
-        Init -> goto $ Fetching False def
-        WaitMemWrite -> goto $ Fetching False def
-        WaitWriteAddr1 nextAddr hi -> do
-            pokeByte nextAddr hi
-            goto WaitMemWrite
-        WaitReadAddr0 nextAddr target -> do
-            lo <- readMem
-            tellAddr nextAddr
-            goto $ WaitReadAddr1 target lo
-        WaitReadAddr1 target lo -> do
-            hi <- readMem
-            let addr = bitCoerce (hi, lo)
-            goto $ Fetching False def
-            case target of
-                ToPC -> setPC addr
-                ToRegPair rp -> setRegPair rp addr
-                SwapHL hl0 -> do
-                    setRegPair rHL addr
-                    pushAddr hl0
-        Fetching False buf | bufferNext buf == 0 && interrupted -> do
-            -- trace (show ("Interrupt accepted", pc)) $ return ()
-            modify $ \s -> s{ allowInterrupts = False, interrupted = False }
-            output $ #cpuOutIRQAck True
-            goto $ Fetching True def
-        Fetching interrupting buf -> do
-            buf' <- remember buf <$> do
-                x <- readMem
-                unless interrupting $ setPC $ pc + 1
-                return x
-            instr_ <- runFetchM buf' $ fetchInstr fetch
-            instr <- case instr_ of
-                Left Underrun -> goto (Fetching interrupting buf') >> abort
-                Left Overrun -> error "Overrun"
-                Right instr -> return instr
+        Init -> do
+            setReg2 =<< getPC
+            goto $ Fetching False
+        -- Fetching False | interrupted -> do
+        --     -- trace (show ("Interrupt accepted", pc)) $ return ()
+        --     modify $ \s -> s{ allowInterrupts = False, interrupted = False }
+        --     output $ #cpuOutIRQAck True
+        --     goto $ Fetching True
+        Fetching interrupting -> do
+            -- pc <- getPC
+            s <- pretty
+            instr <- decodeInstr <$> fetch
+            -- trace (unlines [show instr, s]) $ return ()
             modify $ \s -> s{ instrBuf = instr }
-            goto $ Fetching False def
-            -- trace (printf "%04x: %s" (fromIntegral pc :: Word16) (show instr)) $ return ()
-            exec instr
-        WaitMemRead -> do
-            goto $ Fetching False def
-            exec instrBuf
+            setReg2 =<< getPC
+            -- selectPort False
+            goto $ Executing 0
+        Executing i -> do
+            instr <- gets instrBuf
+            let uop = microcode instr !! i
+            -- traceShow (i, uop) $ return ()
+            microexec uop
+            maybe nextInstr (goto . Executing) $ succIdx i
+
+nextInstr :: M ()
+nextInstr = do
+    setReg2 =<< getPC
+    -- selectPort False
+    goto $ Fetching False
+
+microexec :: MicroOp -> M ()
+microexec Imm1 = setReg1 =<< fetch
+microexec Imm2 = do
+    lo <- getReg1
+    hi <- fetch
+    setReg2 $ bitCoerce (hi, lo)
+    tellAddr =<< getReg2
+microexec Jump = setPC =<< getReg2
+microexec (Get2 rp) = setReg2 =<< getRegPair rp
+microexec (Swap2 rp) = do
+    tmp <- getReg2
+    setReg2 =<< getRegPair rp
+    setRegPair rp tmp
+microexec (Get r) = setReg1 =<< getReg r
+microexec (Set r) = setReg r =<< getReg1
+microexec PushPC = do
+    (v, pc') <- twist <$> getPC
+    pushByte v
+    setPC pc'
+microexec Push = do
+    (v, addr') <- twist <$> getReg2
+    pushByte v
+    setReg2 addr'
+microexec Pop1 = do
+    x <- popByte
+    (y, _) <- twist <$> getReg2
+    setReg2 $ bitCoerce (x, y)
+microexec Pop2 = do
+    x <- readByte
+    (y, _) <- twist <$> getReg2
+    setReg2 $ bitCoerce (x, y)
+microexec ReadMem = do
+    selectPort False
+    setReg1 =<< readByte
+microexec WriteMem = do
+    tellPort =<< gets portSelect
+    tellWrite =<< getReg1
+    selectPort False
+microexec (Compute2 fun2 updateC) = do
+    arg <- case fun2 of
+        Inc2 -> return 0x0001
+        Dec2 -> return 0xffff
+        AddHL -> getRegPair rHL
+    x <- getReg2
+    let (c', x') = bitCoerce $ x `add` arg
+    setReg2 x'
+    when updateC $ setFlag fC c'
+microexec (Compute arg fun updateC updateA) = do
+    c <- getFlag fC
+    x <- case arg of
+        RegA -> getReg rA
+        Const01 -> pure 0x01
+        ConstFF -> pure 0xff
+    y <- getReg1
+    let (a', c', result) = alu fun c x y
+    when updateC $ setFlag fC c'
+    when updateA $ setFlag fA a'
+    setReg1 result
+microexec (SetInt b) = setInt b
+microexec UpdateFlags = do
+    x <- getReg1
+    setFlag fZ (x == 0)
+    setFlag fS (x `testBit` 7)
+    setFlag fP (even $ popCount x)
+microexec (When cond) = do
+    passed <- evalCond cond
+    unless passed $ nextInstr >> abort
+microexec Port = do
+    setReg2 =<< pure . dup =<< getReg1
+    selectPort True
   where
-    exec NOP = return ()
-    exec HLT = goto Halted
-    exec (RST irq) = call $ fromIntegral irq `shiftL` 3
-    exec (INT b) = setInt b
-    exec (JMP addr) = setPC addr
-    exec (JMPIf cond addr) = whenM (evalCond cond) $ setPC addr
-    exec (CALL addr) = call addr
-    exec (CALLIf cond addr) = whenM (evalCond cond) $ call addr
-    exec RET = popAddr ToPC
-    exec (RETIf cond) = whenM (evalCond cond) $ popAddr ToPC
-    exec (ALU fun src) = do
-        a <- getReg rA
-        x <- evalSrc src
-        c <- getFlag fC
-        let (h', c', a') = alu fun c a x
-        updateFlags (Just (h', c')) a'
-        case fun of
-            CMP -> return ()
-            _ -> setReg rA a'
-    exec (LDA addr) = setReg rA =<< peekByte addr
-    exec (STA addr) = pokeByte addr =<< getReg rA
-    exec (LDAX rp) = setReg rA =<< peekByte =<< getRegPair rp
-    exec (STAX rp) = do
-        addr <- getRegPair rp
-        pokeByte addr =<< getReg rA
-    exec (DCX rp) = setRegPair rp =<< pure . subtract 1 =<< getRegPair rp
-    exec (INX rp) = setRegPair rp =<< pure . (+ 1) =<< getRegPair rp
-    exec DAA = do
-        a <- getReg rA
+    dup x = bitCoerce (x, x)
+microexec PortIn = do
+    microexec Port
+    tellPort True
+microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
+microexec (ShiftRotate sr) = do
+    (b7, (b654321 :: Unsigned 6), b0) <- bitCoerce <$> getReg1
+    c <- getFlag fC
+    let (x', c') = case sr of
+            RotateR -> (bitCoerce (b0, b7, b654321), b0)
+            RotateL -> (bitCoerce (b654321, b0, b7), b7)
+            ShiftR -> (bitCoerce (c, b7, b654321), b0)
+            ShiftL -> (bitCoerce (b654321, b0, c), b7)
+    setFlag fC c'
+    setReg1 x'
+microexec (SetFlag flag fun0) = do
+    f <- getFlag flag
+    setFlag flag $ case fun0 of
+        ConstTrue0 -> True
+        Complement0 -> complement f
+microexec FixupBCD = do
+    a <- getFlag fA
+    c <- getFlag fC
 
-        ac <- getFlag fA
-        (ac, a) <- return $
-            let (_, a0) = bitCoerce a :: (Unsigned 4, Unsigned 4)
-            in if a0 > 9 || ac then bitCoerce $ add a (0x06 :: Value) else (False, a)
-        setFlag fA ac
+    x <- getReg1
+    (a, x) <- return $
+        let (_, x0) = bitCoerce x :: (Unsigned 4, Unsigned 4)
+        in if x0 > 9 || a then bitCoerce $ x `add` (0x06 :: Value) else (False, x)
 
-        c <- getFlag fC
-        (c, a) <- return $
-            let (a1, _) = bitCoerce a :: (Unsigned 4, Unsigned 4)
-            in if a1 > 9 || c then bitCoerce $ add a (0x60 :: Value) else (False, a)
-        setFlag fC c
-        updateFlags (Just (ac, c)) a
-        setReg rA a
-    exec (INR op) = do
-        x <- evalSrc (Op op)
-        let x' = x + 1
-        updateFlags Nothing x'
-        setFlag fA $ truncateB @_ @4 x' == 0
-        writeTo op x'
-    exec (DCR op) = do
-        x <- evalSrc (Op op)
-        let x' = x - 1
-        updateFlags Nothing x'
-        setFlag fA $ truncateB @_ @4 x' /= 0xf
-        writeTo op x'
-    exec (DAD rp) = do
-        hl <- getRegPair rHL
-        arg <- getRegPair rp
-        let (c, hl') = bitCoerce $ add hl arg
-        setFlag fC c
-        setRegPair rHL hl'
-    exec RRC = do
-        a <- getReg rA
-        let c = a `testBit` 0
-            a' = a `rotateR` 1
-        setFlag fC c
-        setReg rA a'
-    exec RLC = do
-        a <- getReg rA
-        let c = a `testBit` 7
-            a' = a `rotateL` 1
-        setFlag fC c
-        setReg rA a'
-    exec RAR = do
-        a <- getReg rA
-        c <- getFlag fC
-        let a' = (if c then (`setBit` 7) else id) (a `shiftR` 1)
-            c' = a `testBit` 0
-        setFlag fC c'
-        setReg rA a'
-    exec RAL = do
-        a <- getReg rA
-        c <- getFlag fC
-        let a' = (if c then (`setBit` 0) else id) (a `shiftL` 1)
-            c' = a `testBit` 7
-        setFlag fC c'
-        setReg rA a'
-    exec XCHG = do
-        de <- getRegPair rDE
-        hl <- getRegPair rHL
-        setRegPair rDE hl
-        setRegPair rHL de
-    exec CMA = setReg rA =<< pure . complement =<< getReg rA
-    exec CMC = setFlag fC =<< pure . complement =<< getFlag fC
-    exec STC = setFlag fC True
-    exec (LXI rp xy) = setRegPair rp xy
-    exec PCHL = setPC =<< getRegPair rHL
-    exec SPHL = setSP =<< getRegPair rHL
-    exec (LHLD addr) = peekAddr addr (ToRegPair rHL)
-    exec (SHLD addr) = pokeAddr addr =<< getRegPair rHL
-    exec XTHL = do
-        hl <- getRegPair rHL
-        popAddr (SwapHL hl)
-    exec (OUT port) = writePort port =<< getReg rA
-    exec (IN port) = setReg rA =<< readPort port
-    exec (MOV dest src) = writeTo dest =<< evalSrc src
-    exec (PUSH rp) = pushAddr =<< getRegPair rp
-    exec (POP rp) = popAddr (ToRegPair rp)
+    (c, x) <- return $
+        let (x1, _) = bitCoerce x :: (Unsigned 4, Unsigned 4)
+        in if x1 > 9 || c then bitCoerce $ x `add` (0x60 :: Value) else (False, x)
 
-call :: Addr -> M ()
-call addr = do
-    pushAddr =<< getPC
-    setPC addr
+    setFlag fA a
+    setFlag fC c
+    setReg1 x
+microexec Nop = return ()
+
+setReg1 :: Value -> M ()
+setReg1 v = modify $ \s -> s{ valueBuf = v }
+
+getReg1 :: M Value
+getReg1 = gets valueBuf
+
+setReg2 :: Addr -> M ()
+setReg2 addr = modify $ \s -> s{ addrBuf = addr }
+
+getReg2 :: M Addr
+getReg2 = gets addrBuf
+
+twist :: Addr -> (Value, Addr)
+twist x = (hi, lohi)
+  where
+    (hi, lo) = bitCoerce x :: (Value, Value)
+    lohi = bitCoerce (lo, hi)
 
 goto :: Phase -> M ()
 goto ph = modify $ \s -> s{ phase = ph }
@@ -297,88 +312,20 @@ getInt = gets allowInterrupts
 setInt :: Bool -> M ()
 setInt allow = modify $ \s -> s{ allowInterrupts = allow }
 
-pushAddr :: Addr -> M ()
-pushAddr addr = do
-    sp <- modify (\s -> s{ sp = sp s - 2 }) *> gets sp
-    pokeAddr sp addr
-
 pushByte :: Value -> M ()
 pushByte x = do
-    modify $ \s -> s{ sp = sp s - 1 }
-    sp <- gets sp
-    pokeByte sp x
-
-tellAddr :: Addr -> M ()
-tellAddr addr = do
-    modify $ \s -> s{ addrBuf = addr }
-    output $ #cpuOutMemAddr addr
-
-tellPort :: Port -> M ()
-tellPort port = do
-    tellAddr addr
-    output $ #cpuOutPortSelect True
-  where
-    addr = bitCoerce (port, port) :: Addr
-
-tellWrite :: Value -> M ()
-tellWrite x = do
-    output $ #cpuOutMemWrite (Just x)
-    goto WaitMemWrite
-
-pokeByte :: Addr -> Value -> M ()
-pokeByte addr x = do
-    tellAddr addr
+    sp <- modify (\s -> s{ sp = sp s - 1 }) *> gets sp
+    tellAddr sp
     tellWrite x
 
-pokeAddr :: Addr -> Addr -> M ()
-pokeAddr addr x = do
-    pokeByte addr lo
-    goto $ WaitWriteAddr1 (addr + 1) hi
-  where
-    (hi, lo) = bitCoerce x
+tellAddr :: Addr -> M ()
+tellAddr = output . #cpuOutMemAddr
 
-peekByte :: Addr -> M Value
-peekByte addr = do
-    phase <- getsStart phase
-    case phase of
-        Fetching _ buf -> do
-            tellAddr addr
-            goto WaitMemRead
-            abort
-        WaitMemRead -> readMem
+tellWrite :: Value -> M ()
+tellWrite = output . #cpuOutMemWrite . Just
 
-popAddr :: ReadTarget -> M ()
-popAddr target = do
-    sp <- gets sp <* modify (\s -> s{ sp = sp s + 2 })
-    peekAddr sp target
+tellPort :: Bool -> M ()
+tellPort = output . #cpuOutPortSelect
 
-peekAddr :: Addr -> ReadTarget -> M ()
-peekAddr addr target = do
-    tellAddr addr
-    goto $ WaitReadAddr0 (addr + 1) target
-
-writePort :: Port -> Value -> M ()
-writePort port value = do
-    tellPort port
-    tellWrite value
-
-readPort :: Port -> M Value
-readPort port = do
-    phase <- getsStart phase
-    case phase of
-        Fetching _ buf -> do
-            tellPort port
-            goto WaitMemRead
-            abort
-        WaitMemRead -> readMem
-
-evalSrc :: Src -> M Value
-evalSrc (Imm val) = return val
-evalSrc (Op (Reg r)) = getReg r
-evalSrc (Op AddrHL) = peekByte =<< getRegPair rHL
-
-writeTo :: Op -> Value -> M ()
-writeTo AddrHL x = do
-    addr <- getRegPair rHL
-    pokeByte addr x
-writeTo (Reg r) x = setReg r x
+selectPort :: Bool -> M ()
+selectPort selected = modify $ \s -> s{ portSelect = selected }
