@@ -5,9 +5,14 @@ import Prelude ()
 import Clash.Prelude
 import Hardware.Intel8080
 
+data HiLo
+    = Hi
+    | Lo
+    deriving (Show, Generic, Undefined)
+
 data MicroOp
-    = Imm2
-    | Imm1
+    = Imm1
+    | Imm2
     | Get2 RegPair
     | Swap2 RegPair
     | Get Reg
@@ -15,10 +20,10 @@ data MicroOp
     | ReadMem
     | WriteMem
     | Jump
-    | PushPC
+    | PushPC HiLo
     | When Cond
-    | Push
-    | Pop
+    | Push HiLo
+    | Pop HiLo
     | Port
     | ShiftRotate ShiftRotate
     | Compute ArgA ALU Bool Bool
@@ -93,15 +98,15 @@ microcode RRC = [Get rA, ShiftRotate RotateR, Set rA]
 microcode RLC = [Get rA, ShiftRotate RotateL, Set rA]
 microcode RAR = [Get rA, ShiftRotate ShiftR, Set rA]
 microcode RAL = [Get rA, ShiftRotate ShiftL, Set rA]
-microcode (RST irq) = [PushPC, Rst irq, Jump]
-microcode JMP = [Imm2, Jump]
-microcode (JMPIf cond) = [Imm2, When cond, Jump]
-microcode CALL = [Imm2, PushPC, Jump]
-microcode (CALLIf cond) = [Imm2, When cond, PushPC, Jump]
-microcode RET = [Pop, Jump]
-microcode (RETIf cond) = [When cond, Pop, Jump]
-microcode LDA = [Imm2, ReadMem, Set rA]
-microcode STA = [Get rA, Imm2, WriteMem]
+microcode (RST irq) = [PushPC Hi, PushPC Lo, Rst irq, Jump]
+microcode JMP = [Imm1, Imm2, Jump]
+microcode (JMPIf cond) = [Imm1, Imm2, When cond, Jump]
+microcode CALL = [Imm1, Imm2, PushPC Hi, PushPC Lo, Jump]
+microcode (CALLIf cond) = [Imm1, Imm2, When cond, PushPC Hi, PushPC Lo, Jump]
+microcode RET = [Pop Lo, Pop Hi, Jump]
+microcode (RETIf cond) = [When cond, Pop Lo, Pop Hi, Jump]
+microcode LDA = [Imm1, Imm2, ReadMem, Set rA]
+microcode STA = [Imm1, Imm2, Get rA, WriteMem]
 microcode (LDAX rp) = [Get2 rp, ReadMem, Set rA]
 microcode (STAX rp) = [Get2 rp, Get rA, WriteMem]
 microcode (DCX rp) = [Get2 rp, Compute2 Dec2 False, Swap2 rp]
@@ -112,14 +117,14 @@ microcode (DCR AddrHL) = [Get2 rHL, ReadMem, Compute ConstFF ADD False True, Upd
 microcode (DCR (Reg r)) = [Get r, Compute ConstFF ADD False True, UpdateFlags, Set r]
 microcode (DAD rp) = [Get2 rp, Compute2 AddHL True, Swap2 rHL]
 microcode DAA = [Get rA, FixupBCD, UpdateFlags, Set rA]
-microcode (LXI rp) = [Imm2, Swap2 rp]
+microcode (LXI rp) = [Imm1, Imm2, Swap2 rp]
 microcode PCHL = [Get2 rHL, Jump]
 microcode SPHL = [Get2 rHL, Swap2 SP]
-microcode LHLD = [Imm2, ReadMem, Set rL, Compute2 Inc2 False, ReadMem, Set rH]
-microcode SHLD = [Imm2, Get rL, WriteMem, Compute2 Inc2 False, Get rH, WriteMem]
-microcode XTHL = [Pop, Swap2 rHL, Push]
-microcode (PUSH rp) = [Get2 rp, Push]
-microcode (POP rp) = [Pop, Swap2 rp]
+microcode LHLD = [Imm1, Imm2, ReadMem, Set rL, Compute2 Inc2 False, ReadMem, Set rH]
+microcode SHLD = [Imm1, Imm2, Get rL, WriteMem, Compute2 Inc2 False, Get rH, WriteMem]
+microcode XTHL = [Pop Lo, Pop Hi, Swap2 rHL, Push Hi, Push Lo]
+microcode (PUSH rp) = [Get2 rp, Push Hi, Push Lo]
+microcode (POP rp) = [Pop Lo, Pop Hi, Swap2 rp]
 microcode (MOV dst src) = read <> write
   where
     read = case src of

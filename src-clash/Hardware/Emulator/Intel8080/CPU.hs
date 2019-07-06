@@ -76,12 +76,6 @@ peekByte addr = do
     x <- liftIO $ peekAt mem addr
     return x
 
-peekAddr :: Addr -> CPU Addr
-peekAddr addr = do
-    lo <- peekByte addr
-    hi <- peekByte (addr + 1)
-    return $ bitCoerce (hi, lo)
-
 instance (KnownNat n) => PrintfArg (Unsigned n) where
     formatArg x = formatArg (fromIntegral x :: Integer)
 
@@ -89,13 +83,6 @@ pokeByte :: Addr -> Value -> CPU ()
 pokeByte addr x = do
     mem <- asks mem
     liftIO $ pokeTo mem addr x
-
-pokeAddr :: Addr -> Addr -> CPU ()
-pokeAddr addr x = do
-    pokeByte addr lo
-    pokeByte (addr + 1) hi
-  where
-    (hi, lo) = bitCoerce x
 
 setPC :: Addr -> CPU ()
 setPC pc' = modify $ \s -> s{ pc = pc' }
@@ -115,21 +102,15 @@ fetchAddr = do
     hi <- fetchByte
     return $ bitCoerce (hi, lo)
 
-pushAddr :: Addr -> CPU ()
-pushAddr x = do
-    sp <- modify (\s -> s{ sp = sp s - 2 }) *> gets sp
-    pokeAddr sp x
+pushByte :: Value -> CPU ()
+pushByte x = do
+    sp <- modify (\s -> s{ sp = sp s - 1}) *> gets sp
+    pokeByte sp x
 
-popAddr :: CPU Addr
-popAddr = do
-    sp <- gets sp <* modify (\s -> s{ sp = sp s + 2 })
-    peekAddr sp
-
-writeTo :: Op -> Value -> CPU ()
-writeTo AddrHL x = do
-    addr <- getRegPair rHL
-    pokeByte addr x
-writeTo (Reg r) x = setReg r x
+popByte :: CPU Value
+popByte = do
+    sp <- gets sp <* modify (\s -> s{ sp = sp s + 1})
+    peekByte sp
 
 writePort :: Port -> Value -> CPU ()
 writePort port value = do
@@ -184,9 +165,29 @@ setReg2 addr = modify $ \s -> s{ reg2 = addr }
 getReg2 :: CPU Addr
 getReg2 = gets reg2
 
+bytes :: Addr -> (Value, Value)
+bytes = bitCoerce
+
+byte :: HiLo -> Addr -> Value
+byte hilo = sel . bytes
+  where
+    sel = case hilo of
+        Hi -> fst
+        Lo -> snd
+
+setByte :: HiLo -> Value -> Addr -> Addr
+setByte hilo x w = bitCoerce $ case hilo of
+    Hi -> (x, lo0)
+    Lo -> (hi0, x)
+  where
+    (hi0, lo0) = bytes w
+
 microexec :: MicroOp -> CPU ()
 microexec Imm1 = setReg1 =<< fetchByte
-microexec Imm2 = setReg2 =<< fetchAddr
+microexec Imm2 = do
+    lo <- getReg1
+    hi <- fetchByte
+    setReg2 $ bitCoerce (hi, lo)
 microexec Jump = setPC =<< getReg2
 microexec (Get2 rp) = setReg2 =<< getRegPair rp
 microexec (Swap2 rp) = do
@@ -195,9 +196,11 @@ microexec (Swap2 rp) = do
     setRegPair rp tmp
 microexec (Get r) = setReg1 =<< getReg r
 microexec (Set r) = setReg r =<< getReg1
-microexec PushPC = pushAddr =<< getPC
-microexec Push = pushAddr =<< getReg2
-microexec Pop = setReg2 =<< popAddr
+microexec (PushPC hilo) = pushByte =<< byte hilo <$> getPC
+microexec (Push hilo) = pushByte =<< byte hilo <$> getReg2
+microexec (Pop hilo) = do
+    x <- popByte
+    setReg2 =<< setByte hilo x <$> getReg2
 microexec ReadMem = do
     addr <- getReg2
     targetPort <- gets targetPort
