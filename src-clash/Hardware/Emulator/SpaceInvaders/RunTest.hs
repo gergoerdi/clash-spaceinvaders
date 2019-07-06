@@ -89,4 +89,7 @@ main :: IO ()
 main = do
     hSetBuffering stdout NoBuffering
 
-    runTest "image/testbench/TST8080.COM"
+    mapM_ runTest
+      [ "image/testbench/TST8080.COM"
+      , "image/testbench/8080PRE.COM"
+      ]
