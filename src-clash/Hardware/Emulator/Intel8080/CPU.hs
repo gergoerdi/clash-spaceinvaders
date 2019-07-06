@@ -151,7 +151,7 @@ exec instr = do
 
 microinit :: CPU ()
 microinit = do
-    modify $ \s -> s{ targetPort = False }
+    selectPort False
 
 setReg1 :: Value -> CPU ()
 setReg1 v = modify $ \s -> s{ reg1 = v }
@@ -165,17 +165,14 @@ setReg2 addr = modify $ \s -> s{ reg2 = addr }
 getReg2 :: CPU Addr
 getReg2 = gets reg2
 
-bytes :: Addr -> (Value, Value)
-bytes = bitCoerce
-
-byte :: HiLo -> Addr -> Value
-byte hilo = sel . bytes
+twist :: Addr -> (Value, Addr)
+twist x = (hi, lohi)
   where
-    sel = case hilo of
-        Hi -> fst
-        Lo -> snd
+    (hi, lo) = bitCoerce x :: (Value, Value)
+    lohi = bitCoerce (lo, hi)
 
 microexec :: MicroOp -> CPU ()
+microexec Nop = return ()
 microexec Imm1 = setReg1 =<< fetchByte
 microexec Imm2 = do
     lo <- getReg1
@@ -189,22 +186,31 @@ microexec (Swap2 rp) = do
     setRegPair rp tmp
 microexec (Get r) = setReg1 =<< getReg r
 microexec (Set r) = setReg r =<< getReg1
-microexec (PushPC hilo) = pushByte =<< byte hilo <$> getPC
-microexec (Push hilo) = pushByte =<< byte hilo <$> getReg2
-microexec Pop = do
+microexec PushPC = do
+    (v, pc') <- twist <$> getPC
+    pushByte v
+    setPC pc'
+microexec Push = do
+    (v, addr') <- twist <$> getReg2
+    pushByte v
+    setReg2 addr'
+microexec Pop1 = do
     x <- popByte
-    (y, _) <- bytes <$> getReg2
+    (y, _) <- twist <$> getReg2
     setReg2 $ bitCoerce (x, y)
+microexec Pop2 = return () -- Only needed for sync RAM access
 microexec ReadMem = do
     addr <- getReg2
     targetPort <- gets targetPort
     let read = if targetPort then readPort (truncateB addr) else peekByte addr
     setReg1 =<< read
+    selectPort False
 microexec WriteMem = do
     addr <- getReg2
     targetPort <- gets targetPort
     let write = if targetPort then writePort (truncateB addr) else pokeByte addr
     write =<< getReg1
+    selectPort False
 microexec (Compute2 fun2 updateC) = do
     arg <- case fun2 of
         Inc2 -> return 0x0001
@@ -235,9 +241,10 @@ microexec (When cond) = do
     guard passed
 microexec Port = do
     setReg2 =<< pure . dup =<< getReg1
-    modify $ \s -> s{ targetPort = True }
+    selectPort True
   where
     dup x = bitCoerce (x, x)
+microexec PortIn = microexec Port
 microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
 microexec (ShiftRotate sr) = do
     (b7, (b654321 :: Unsigned 6), b0) <- bitCoerce <$> getReg1
@@ -271,3 +278,6 @@ microexec FixupBCD = do
     setFlag fC c
     setReg1 x
 microexec (SetInt b) = setInt b
+
+selectPort :: Bool -> CPU ()
+selectPort selected = modify $ \s -> s{ targetPort = selected }

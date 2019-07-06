@@ -5,11 +5,6 @@ import Prelude ()
 import Clash.Prelude
 import Hardware.Intel8080
 
-data HiLo
-    = Hi
-    | Lo
-    deriving (Show, Generic, Undefined)
-
 data MicroOp
     = Imm1
     | Imm2
@@ -20,11 +15,13 @@ data MicroOp
     | ReadMem
     | WriteMem
     | Jump
-    | PushPC HiLo
+    | PushPC
     | When Cond
-    | Push HiLo
-    | Pop
+    | Push
+    | Pop1
+    | Pop2
     | Port
+    | PortIn
     | ShiftRotate ShiftRotate
     | Compute ArgA ALU Bool Bool
     | UpdateFlags
@@ -33,6 +30,7 @@ data MicroOp
     | SetFlag Flag ALU0
     | SetInt Bool
     | Rst (Unsigned 3)
+    | Nop
     deriving (Show, Generic, Undefined)
 
 data ArgA
@@ -75,66 +73,72 @@ data ShiftRotate
     | RotateR
     deriving (Show, Generic, Undefined)
 
-microcode :: Instr -> [MicroOp]
-microcode NOP = []
--- microcode HLT = _
-microcode (INT b) = [SetInt b]
-microcode CMA = [Get rA, Compute ConstFF SUB False False, Set rA]
-microcode CMC = [SetFlag fC Complement0]
-microcode STC = [SetFlag fC ConstTrue0]
-microcode (ALU alu src) = read <> [Compute RegA alu True True, UpdateFlags, Set rA]
+type MicroLen = 8
+type Microcode = Vec MicroLen MicroOp
+
+mc :: (KnownNat m, (n + m) ~ MicroLen) => Vec n MicroOp -> Microcode
+mc ops = ops ++ pure Nop
+
+microcode :: Instr -> Microcode
+microcode NOP = mc Nil
+-- microcode HLT = toMC _
+microcode (INT b) = mc $ SetInt b :> Nil
+microcode CMA = mc $ Get rA :> Compute ConstFF SUB False False :> Set rA :> Nil
+microcode CMC = mc $ SetFlag fC Complement0 :> Nil
+microcode STC = mc $ SetFlag fC ConstTrue0 :> Nil
+microcode (ALU alu src) = mc $ read ++ Compute RegA alu True True :> UpdateFlags :> Set rA :> Nil
   where
     read = case src of
-        Imm -> [Imm1]
-        Op (Reg r) -> [Get r]
-        Op AddrHL -> [Get2 rHL, ReadMem]
-microcode (CMP src) = read <> [Compute RegA SUB True True, UpdateFlags]
+        Imm -> Imm1 :> Nop :> Nil
+        Op (Reg r) -> Get r :> Nop :> Nil
+        Op AddrHL -> Get2 rHL :> ReadMem :> Nil
+microcode (CMP src) = mc $ read ++ Compute RegA SUB True True :> UpdateFlags :> Nil
   where
     read = case src of
-        Imm -> [Imm1]
-        Op (Reg r) -> [Get r]
-        Op AddrHL -> [Get2 rHL, ReadMem]
-microcode RRC = [Get rA, ShiftRotate RotateR, Set rA]
-microcode RLC = [Get rA, ShiftRotate RotateL, Set rA]
-microcode RAR = [Get rA, ShiftRotate ShiftR, Set rA]
-microcode RAL = [Get rA, ShiftRotate ShiftL, Set rA]
-microcode (RST irq) = [PushPC Hi, PushPC Lo, Rst irq, Jump]
-microcode JMP = [Imm1, Imm2, Jump]
-microcode (JMPIf cond) = [Imm1, Imm2, When cond, Jump]
-microcode CALL = [Imm1, Imm2, PushPC Hi, PushPC Lo, Jump]
-microcode (CALLIf cond) = [Imm1, Imm2, When cond, PushPC Hi, PushPC Lo, Jump]
-microcode RET = [Pop, Pop, Jump]
-microcode (RETIf cond) = [When cond, Pop, Pop, Jump]
-microcode LDA = [Imm1, Imm2, ReadMem, Set rA]
-microcode STA = [Imm1, Imm2, Get rA, WriteMem]
-microcode (LDAX rp) = [Get2 rp, ReadMem, Set rA]
-microcode (STAX rp) = [Get2 rp, Get rA, WriteMem]
-microcode (DCX rp) = [Get2 rp, Compute2 Dec2 False, Swap2 rp]
-microcode (INX rp) = [Get2 rp, Compute2 Inc2 False, Swap2 rp]
-microcode (INR AddrHL) = [Get2 rHL, ReadMem, Compute Const01 ADD False True, UpdateFlags, WriteMem]
-microcode (INR (Reg r)) = [Get r, Compute Const01 ADD False True, UpdateFlags, Set r]
-microcode (DCR AddrHL) = [Get2 rHL, ReadMem, Compute ConstFF ADD False True, UpdateFlags, WriteMem]
-microcode (DCR (Reg r)) = [Get r, Compute ConstFF ADD False True, UpdateFlags, Set r]
-microcode (DAD rp) = [Get2 rp, Compute2 AddHL True, Swap2 rHL]
-microcode DAA = [Get rA, FixupBCD, UpdateFlags, Set rA]
-microcode (LXI rp) = [Imm1, Imm2, Swap2 rp]
-microcode PCHL = [Get2 rHL, Jump]
-microcode SPHL = [Get2 rHL, Swap2 SP]
-microcode LHLD = [Imm1, Imm2, ReadMem, Set rL, Compute2 Inc2 False, ReadMem, Set rH]
-microcode SHLD = [Imm1, Imm2, Get rL, WriteMem, Compute2 Inc2 False, Get rH, WriteMem]
-microcode XTHL = [Pop, Pop, Swap2 rHL, Push Hi, Push Lo]
-microcode (PUSH rp) = [Get2 rp, Push Hi, Push Lo]
-microcode (POP rp) = [Pop, Pop, Swap2 rp]
-microcode (MOV dst src) = read <> write
+        Imm -> Imm1 :> Nop :> Nil
+        Op (Reg r) -> Get r :> Nop :> Nil
+        Op AddrHL -> Get2 rHL :> ReadMem :> Nil
+microcode RRC = mc $ Get rA :> ShiftRotate RotateR :> Set rA :> Nil
+microcode RLC = mc $ Get rA :> ShiftRotate RotateL :> Set rA :> Nil
+microcode RAR = mc $ Get rA :> ShiftRotate ShiftR :> Set rA :> Nil
+microcode RAL = mc $ Get rA :> ShiftRotate ShiftL :> Set rA :> Nil
+microcode (RST irq) = mc $ PushPC :> PushPC :> Rst irq :> Jump :> Nil
+microcode JMP = mc $ Imm1 :> Imm2 :> Jump :> Nil
+microcode (JMPIf cond) = mc $ Imm1 :> Imm2 :> When cond :> Jump :> Nil
+microcode CALL = mc $ Imm1 :> Imm2 :> PushPC :> PushPC :> Jump :> Nil
+microcode (CALLIf cond) = mc $ Imm1 :> Imm2 :> When cond :> PushPC :> PushPC :> Jump :> Nil
+microcode RET = mc $ Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
+microcode (RETIf cond) = mc $ When cond :> Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
+microcode LDA = mc $ Imm1 :> Imm2 :> ReadMem :> Set rA :> Nil
+microcode STA = mc $ Imm1 :> Imm2 :> Get rA :> WriteMem :> Nil
+microcode (LDAX rp) = mc $ Get2 rp :> ReadMem :> Set rA :> Nil
+microcode (STAX rp) = mc $ Get2 rp :> Get rA :> WriteMem :> Nil
+microcode (DCX rp) = mc $ Get2 rp :> Compute2 Dec2 False :> Swap2 rp :> Nil
+microcode (INX rp) = mc $ Get2 rp :> Compute2 Inc2 False :> Swap2 rp :> Nil
+microcode (INR AddrHL) = mc $ Get2 rHL :> ReadMem :> Compute Const01 ADD False True :> UpdateFlags :> WriteMem :> Nil
+microcode (INR (Reg r)) = mc $ Get r :> Compute Const01 ADD False True :> UpdateFlags :> Set r :> Nil
+microcode (DCR AddrHL) = mc $ Get2 rHL :> ReadMem :> Compute ConstFF ADD False True :> UpdateFlags :> WriteMem :> Nil
+microcode (DCR (Reg r)) = mc $ Get r :> Compute ConstFF ADD False True :> UpdateFlags :> Set r :> Nil
+microcode (DAD rp) = mc $ Get2 rp :> Compute2 AddHL True :> Swap2 rHL :> Nil
+microcode DAA = mc $ Get rA :> FixupBCD :> UpdateFlags :> Set rA :> Nil
+microcode (LXI rp) = mc $ Imm1 :> Imm2 :> Swap2 rp :> Nil
+microcode PCHL = mc $ Get2 rHL :> Jump :> Nil
+microcode SPHL = mc $ Get2 rHL :> Swap2 SP :> Nil
+microcode LHLD = mc $ Imm1 :> Imm2 :> ReadMem :> Set rL :> Compute2 Inc2 False :> ReadMem :> Set rH :> Nil
+microcode SHLD = mc $ Imm1 :> Imm2 :> Get rL :> WriteMem :> Compute2 Inc2 False :> Get rH :> WriteMem :> Nil
+microcode XTHL = mc $ Pop1 :> Pop1 :> Pop2 :> Swap2 rHL :> Push :> Push :> Nil
+microcode (PUSH rp) = mc $ Get2 rp :> Push :> Push :> Nil
+microcode (POP rp) = mc $ Pop1 :> Pop1 :> Pop2 :> Swap2 rp :> Nil
+microcode (MOV dst src) = mc $ read ++ write
   where
     read = case src of
-        Imm -> [Imm1]
-        Op (Reg r) -> [Get r]
-        Op AddrHL -> [Get2 rHL, ReadMem]
+        Imm -> Imm1 :> Nop :> Nil
+        Op (Reg r) -> Get r :> Nop :> Nil
+        Op AddrHL -> Get2 rHL :> ReadMem :> Nil
     write = case dst of
-        Reg r -> [Set r]
-        AddrHL -> [Get2 rHL, WriteMem]
-microcode XCHG = [Get2 rHL, Swap2 rDE, Swap2 rHL]
-microcode OUT = [Imm1, Port, Get rA, WriteMem]
-microcode IN = [Imm1, Port, ReadMem, Set rA]
+        Reg r -> Set r :> Nop :> Nil
+        AddrHL -> Get2 rHL :> WriteMem :> Nil
+microcode XCHG = mc $ Get2 rHL :> Swap2 rDE :> Swap2 rHL :> Nil
+microcode OUT = mc $ Imm1 :> Port :> Get rA :> WriteMem :> Nil
+microcode IN = mc $ Imm1 :> PortIn :> ReadMem :> Set rA :> Nil
 microcode instr = errorX $ show instr
