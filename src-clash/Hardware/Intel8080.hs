@@ -48,7 +48,7 @@ type Interrupt = Unsigned 3
 
 data Src
     = Op Op
-    | Imm Value
+    | Imm
     deriving (Eq, Ord, Show, Generic, Undefined)
 
 data ALU = ADD | ADC | SUB | SBB | AND | OR | XOR
@@ -59,11 +59,11 @@ data Cond = Cond Flag Bool
 
 data Instr
     = MOV Op Src
-    | LXI RegPair (Unsigned 16)
-    | LDA Addr
-    | STA Addr
-    | LHLD Addr
-    | SHLD Addr
+    | LXI RegPair
+    | LDA
+    | STA
+    | LHLD
+    | SHLD
     | LDAX RegPair
     | STAX RegPair
     | XCHG
@@ -82,10 +82,10 @@ data Instr
     | CMA
     | CMC
     | STC
-    | JMP Addr
-    | JMPIf Cond Addr
-    | CALL Addr
-    | CALLIf Cond Addr
+    | JMP
+    | JMPIf Cond
+    | CALL
+    | CALLIf Cond
     | RET
     | RETIf Cond
     | RST (Unsigned 3)
@@ -94,8 +94,8 @@ data Instr
     | POP RegPair
     | XTHL
     | SPHL
-    | IN Port
-    | OUT Port
+    | IN
+    | OUT
     | INT Bool
     | HLT
     | NOP

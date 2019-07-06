@@ -109,6 +109,12 @@ fetchByte = do
     setPC $ pc + 1
     peekByte pc
 
+fetchAddr :: CPU Addr
+fetchAddr = do
+    lo <- fetchByte
+    hi <- fetchByte
+    return $ bitCoerce (hi, lo)
+
 pushAddr :: Addr -> CPU ()
 pushAddr x = do
     sp <- modify (\s -> s{ sp = sp s - 2 }) *> gets sp
@@ -118,11 +124,6 @@ popAddr :: CPU Addr
 popAddr = do
     sp <- gets sp <* modify (\s -> s{ sp = sp s + 2 })
     peekAddr sp
-
-evalSrc :: Src -> CPU Value
-evalSrc (Imm val) = return val
-evalSrc (Op (Reg r)) = getReg r
-evalSrc (Op AddrHL) = peekByte =<< getRegPair rHL
 
 writeTo :: Op -> Value -> CPU ()
 writeTo AddrHL x = do
@@ -152,7 +153,7 @@ setInt False = disableInterrupts
 
 step :: CPU ()
 step = do
-    instr <- fetchInstr fetchByte
+    instr <- decodeInstr <$> fetchByte
     exec instr
 
 interrupt :: Instr -> CPU ()
@@ -184,17 +185,17 @@ getReg2 :: CPU Addr
 getReg2 = gets reg2
 
 microexec :: MicroOp -> CPU ()
-microexec (Imm2 addr) = setReg2 addr
+microexec Imm1 = setReg1 =<< fetchByte
+microexec Imm2 = setReg2 =<< fetchAddr
 microexec Jump = setPC =<< getReg2
 microexec (Get2 rp) = setReg2 =<< getRegPair rp
 microexec (Swap2 rp) = do
     tmp <- getReg2
     setReg2 =<< getRegPair rp
     setRegPair rp tmp
-microexec (Imm1 val) = setReg1 val
 microexec (Get r) = setReg1 =<< getReg r
 microexec (Set r) = setReg r =<< getReg1
-microexec GetPC = setReg2 =<< getPC
+microexec PushPC = pushAddr =<< getPC
 microexec Push = pushAddr =<< getReg2
 microexec Pop = setReg2 =<< popAddr
 microexec ReadMem = do
@@ -240,6 +241,7 @@ microexec Port = do
     modify $ \s -> s{ targetPort = True }
   where
     dup x = bitCoerce (x, x)
+microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
 microexec (ShiftRotate sr) = do
     (b7, (b654321 :: Unsigned 6), b0) <- bitCoerce <$> getReg1
     c <- getFlag fC
@@ -271,4 +273,4 @@ microexec FixupBCD = do
     setFlag fA a
     setFlag fC c
     setReg1 x
-microexec uop = errorX $ show uop
+microexec (SetInt b) = setInt b
