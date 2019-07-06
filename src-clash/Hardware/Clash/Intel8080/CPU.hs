@@ -209,7 +209,7 @@ cpu = do
             let (a1, _) = bitCoerce a :: (Unsigned 4, Unsigned 4)
             in if a1 > 9 || c then bitCoerce $ add a (0x60 :: Value) else (False, a)
         setFlag fC c
-        setFlag fA False
+        updateFlags (Just (ac, c)) a
         setReg rA a
     exec (INR op) = do
         x <- evalSrc (Op op)
