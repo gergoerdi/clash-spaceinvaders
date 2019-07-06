@@ -50,7 +50,8 @@ prelude = L.take 0x100 $ framework <> L.repeat 0x00
         ]
 
 runTest romFile = do
-    printf "Running tests from image %s\n" romFile
+    printf "Running tests from image %s:\n" romFile
+    printf "%s\n" (L.replicate 20 '-')
 
     bs <- BS.unpack <$> BS.readFile romFile
     let memL = L.take (2 ^ 16) $ prelude <> bs <> L.repeat 0x00
@@ -83,7 +84,7 @@ runTest romFile = do
     let s = mkS{ pc = 0x0100 }
     flip execStateT s $ whileM_ (liftIO $ not <$> readIORef finished) $ do
         stepTB step
-    putStrLn ""
+    printf "\n%s\n\n\n" (L.replicate 20 '-')
 
 main :: IO ()
 main = do
