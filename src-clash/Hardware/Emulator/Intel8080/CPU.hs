@@ -175,13 +175,6 @@ byte hilo = sel . bytes
         Hi -> fst
         Lo -> snd
 
-setByte :: HiLo -> Value -> Addr -> Addr
-setByte hilo x w = bitCoerce $ case hilo of
-    Hi -> (x, lo0)
-    Lo -> (hi0, x)
-  where
-    (hi0, lo0) = bytes w
-
 microexec :: MicroOp -> CPU ()
 microexec Imm1 = setReg1 =<< fetchByte
 microexec Imm2 = do
@@ -198,9 +191,10 @@ microexec (Get r) = setReg1 =<< getReg r
 microexec (Set r) = setReg r =<< getReg1
 microexec (PushPC hilo) = pushByte =<< byte hilo <$> getPC
 microexec (Push hilo) = pushByte =<< byte hilo <$> getReg2
-microexec (Pop hilo) = do
+microexec Pop = do
     x <- popByte
-    setReg2 =<< setByte hilo x <$> getReg2
+    (y, _) <- bytes <$> getReg2
+    setReg2 $ bitCoerce (x, y)
 microexec ReadMem = do
     addr <- getReg2
     targetPort <- gets targetPort

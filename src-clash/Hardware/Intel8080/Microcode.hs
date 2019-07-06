@@ -23,7 +23,7 @@ data MicroOp
     | PushPC HiLo
     | When Cond
     | Push HiLo
-    | Pop HiLo
+    | Pop
     | Port
     | ShiftRotate ShiftRotate
     | Compute ArgA ALU Bool Bool
@@ -103,8 +103,8 @@ microcode JMP = [Imm1, Imm2, Jump]
 microcode (JMPIf cond) = [Imm1, Imm2, When cond, Jump]
 microcode CALL = [Imm1, Imm2, PushPC Hi, PushPC Lo, Jump]
 microcode (CALLIf cond) = [Imm1, Imm2, When cond, PushPC Hi, PushPC Lo, Jump]
-microcode RET = [Pop Lo, Pop Hi, Jump]
-microcode (RETIf cond) = [When cond, Pop Lo, Pop Hi, Jump]
+microcode RET = [Pop, Pop, Jump]
+microcode (RETIf cond) = [When cond, Pop, Pop, Jump]
 microcode LDA = [Imm1, Imm2, ReadMem, Set rA]
 microcode STA = [Imm1, Imm2, Get rA, WriteMem]
 microcode (LDAX rp) = [Get2 rp, ReadMem, Set rA]
@@ -122,9 +122,9 @@ microcode PCHL = [Get2 rHL, Jump]
 microcode SPHL = [Get2 rHL, Swap2 SP]
 microcode LHLD = [Imm1, Imm2, ReadMem, Set rL, Compute2 Inc2 False, ReadMem, Set rH]
 microcode SHLD = [Imm1, Imm2, Get rL, WriteMem, Compute2 Inc2 False, Get rH, WriteMem]
-microcode XTHL = [Pop Lo, Pop Hi, Swap2 rHL, Push Hi, Push Lo]
+microcode XTHL = [Pop, Pop, Swap2 rHL, Push Hi, Push Lo]
 microcode (PUSH rp) = [Get2 rp, Push Hi, Push Lo]
-microcode (POP rp) = [Pop Lo, Pop Hi, Swap2 rp]
+microcode (POP rp) = [Pop, Pop, Swap2 rp]
 microcode (MOV dst src) = read <> write
   where
     read = case src of
