@@ -131,8 +131,6 @@ acceptInterrupt = do
     when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
     gets interrupted
 
-inputs f = f <$> input
-
 readByte :: M Value
 readByte = maybe retry return =<< inputs cpuInMem
   where
@@ -165,13 +163,13 @@ cpu = do
         Init -> do
             setReg2 =<< getPC
             goto $ Fetching False
-        -- Fetching False | interrupted -> do
-        --     -- trace (show ("Interrupt accepted", pc)) $ return ()
-        --     modify $ \s -> s{ allowInterrupts = False, interrupted = False }
-        --     output $ #cpuOutIRQAck True
-        --     goto $ Fetching True
+        Fetching False | interrupted -> do
+            -- trace (show ("Interrupt accepted", pc)) $ return ()
+            modify $ \s -> s{ allowInterrupts = False, interrupted = False }
+            output $ #cpuOutIRQAck True
+            goto $ Fetching True
         Fetching interrupting -> do
-            instr <- decodeInstr <$> fetch
+            instr <- {- traceState $ -} decodeInstr <$> if interrupting then readByte else fetch
             modify $ \s -> s{ instrBuf = instr }
             setReg2 =<< getPC
             goto $ Executing 0
