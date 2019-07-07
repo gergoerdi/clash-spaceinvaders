@@ -16,7 +16,7 @@ data MicroOp
     | WriteMem
     | Jump
     | PushPC
-    | When Cond
+    | When (Maybe Cond)
     | Push
     | Pop1
     | Pop2
@@ -77,7 +77,7 @@ type MicroLen = 8
 type Microcode = Vec MicroLen MicroOp
 
 mc :: (KnownNat m, (n + m) ~ MicroLen) => Vec n MicroOp -> Microcode
-mc ops = ops ++ pure Nop
+mc ops = ops ++ pure (When Nothing)
 
 microcode :: Instr -> Microcode
 microcode NOP = mc Nil
@@ -104,11 +104,11 @@ microcode RAR = mc $ Get rA :> ShiftRotate ShiftR :> Set rA :> Nil
 microcode RAL = mc $ Get rA :> ShiftRotate ShiftL :> Set rA :> Nil
 microcode (RST irq) = mc $ PushPC :> PushPC :> Rst irq :> Jump :> Nil
 microcode JMP = mc $ Imm1 :> Imm2 :> Jump :> Nil
-microcode (JMPIf cond) = mc $ Imm1 :> Imm2 :> When cond :> Jump :> Nil
+microcode (JMPIf cond) = mc $ Imm1 :> Imm2 :> When (Just cond) :> Jump :> Nil
 microcode CALL = mc $ Imm1 :> Imm2 :> PushPC :> PushPC :> Jump :> Nil
-microcode (CALLIf cond) = mc $ Imm1 :> Imm2 :> When cond :> PushPC :> PushPC :> Jump :> Nil
+microcode (CALLIf cond) = mc $ Imm1 :> Imm2 :> When (Just cond) :> PushPC :> PushPC :> Jump :> Nil
 microcode RET = mc $ Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
-microcode (RETIf cond) = mc $ When cond :> Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
+microcode (RETIf cond) = mc $ When (Just cond) :> Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
 microcode LDA = mc $ Imm1 :> Imm2 :> ReadMem :> Set rA :> Nil
 microcode STA = mc $ Imm1 :> Imm2 :> Get rA :> WriteMem :> Nil
 microcode (LDAX rp) = mc $ Get2 rp :> ReadMem :> Set rA :> Nil

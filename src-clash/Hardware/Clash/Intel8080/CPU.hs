@@ -187,6 +187,7 @@ nextInstr = do
     goto $ Fetching False
 
 microexec :: MicroOp -> M ()
+microexec Nop = return ()
 microexec Imm1 = setReg1 =<< fetch
 microexec Imm2 = do
     lo <- getReg1
@@ -251,7 +252,7 @@ microexec UpdateFlags = do
     setFlag fS (x `testBit` 7)
     setFlag fP (even $ popCount x)
 microexec (When cond) = do
-    passed <- evalCond cond
+    passed <- maybe (pure False) evalCond cond
     unless passed $ nextInstr >> abort
 microexec Port = do
     setReg2 =<< pure . dup =<< getReg1
@@ -293,7 +294,6 @@ microexec FixupBCD = do
     setFlag fA a
     setFlag fC c
     setReg1 x
-microexec Nop = return ()
 
 setReg1 :: Value -> M ()
 setReg1 v = modify $ \s -> s{ valueBuf = v }

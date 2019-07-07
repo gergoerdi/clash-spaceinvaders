@@ -237,7 +237,7 @@ microexec UpdateFlags = do
     setFlag fS (x `testBit` 7)
     setFlag fP (even $ popCount x)
 microexec (When cond) = do
-    passed <- evalCond cond
+    passed <- maybe (pure False) evalCond cond
     guard passed
 microexec Port = do
     setReg2 =<< pure . dup =<< getReg1
