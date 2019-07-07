@@ -25,6 +25,9 @@ import Data.Word
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromMaybe)
 
+import Debug.Trace
+import Text.Printf
+
 data ReadTarget
     = ToPC
     | ToRegPair RegPair
@@ -56,6 +59,25 @@ data CPUState = CPUState
     , portSelect :: Bool
     }
     deriving (Show, Generic, Undefined)
+
+instance (KnownNat n) => PrintfArg (Unsigned n) where
+    formatArg x = formatArg (fromIntegral x :: Integer)
+
+pretty :: M String
+pretty = do
+    pc <- getPC
+    sp <- getSP
+    ~[bc, de, hl, af] <- mapM (getRegPair . uncurry Regs) [(rB, rC), (rD, rE), (rH, rL), (rA, rFlags)]
+    return $ unlines
+      [ printf "IR:         PC: 0x%04x  SP: 0x%04x" pc sp
+      , printf "BC: 0x%04x  DE: 0x%04x  HL: 0x%04x  AF: 0x%04x" bc de hl af
+      ]
+
+traceState :: (Show a) => M a -> M a
+traceState act = do
+    s <- pretty
+    x <- act
+    trace (unlines [s, show x]) $ return x
 
 initState :: CPUState
 initState = CPUState
@@ -149,13 +171,9 @@ cpu = do
         --     output $ #cpuOutIRQAck True
         --     goto $ Fetching True
         Fetching interrupting -> do
-            -- pc <- getPC
-            s <- pretty
             instr <- decodeInstr <$> fetch
-            -- trace (unlines [show instr, s]) $ return ()
             modify $ \s -> s{ instrBuf = instr }
             setReg2 =<< getPC
-            -- selectPort False
             goto $ Executing 0
         Executing i -> do
             instr <- gets instrBuf
