@@ -16,6 +16,10 @@ alu fun c x y = case fun of
     AND -> (testBit (x .|. y) 4, False, x .&. y)
     OR -> (False, False, x .|. y)
     XOR -> (False, False, x `xor` y)
+    RotateR -> (False, b0, bitCoerce (b0, b7, b654321))
+    ShiftR  -> (False, b0, bitCoerce (c, b7, b654321))
+    RotateL -> (False, b7, bitCoerce (b654321, b0, b7))
+    ShiftL  -> (False, b7, bitCoerce (b654321, b0, c))
   where
     addC x y c =
         let xl, yl, xh, yh, zl, zh :: Unsigned 4
@@ -31,3 +35,5 @@ alu fun c x y = case fun of
             (a, zl) = bitCoerce $ (xl `sub` yl) - if c then 1 else 0
             (c', zh) = bitCoerce $ (xh `sub` yh) - if a then 1 else 0
         in (a, c', bitCoerce (zh, zl))
+
+    (b7, b654321, b0) = bitCoerce x :: (Bool, Unsigned 6, Bool)

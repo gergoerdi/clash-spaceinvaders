@@ -22,7 +22,6 @@ data MicroOp
     | Pop2
     | Port
     | PortIn
-    | ShiftRotate ShiftRotate
     | Compute ArgA ALU Bool Bool
     | UpdateFlags
     | Compute2 ALU2 Bool
@@ -50,29 +49,6 @@ data ALU0
     | ConstTrue0
     deriving (Show, Generic, Undefined)
 
--- shifted A:
---
--- Original registerA:        76543210
---
--- Mid part:                   654321
---
--- Left-rotated:               65432107
---                            ^
--- Right-rotated:            07654321
---                                   ^
---
--- Left-shifted:               6543210c
---                            ^
--- Right-shifted:            c7654321
---                                   ^
-
-data ShiftRotate
-    = ShiftL
-    | RotateL
-    | ShiftR
-    | RotateR
-    deriving (Show, Generic, Undefined)
-
 type MicroLen = 8
 type Microcode = Vec MicroLen MicroOp
 
@@ -98,10 +74,10 @@ microcode (CMP src) = mc $ read ++ Compute RegA SUB True True :> UpdateFlags :> 
         Imm -> Imm1 :> Nop :> Nil
         Op (Reg r) -> Get r :> Nop :> Nil
         Op AddrHL -> Get2 rHL :> ReadMem :> Nil
-microcode RRC = mc $ Get rA :> ShiftRotate RotateR :> Set rA :> Nil
-microcode RLC = mc $ Get rA :> ShiftRotate RotateL :> Set rA :> Nil
-microcode RAR = mc $ Get rA :> ShiftRotate ShiftR :> Set rA :> Nil
-microcode RAL = mc $ Get rA :> ShiftRotate ShiftL :> Set rA :> Nil
+microcode RRC = mc $ Get rA :> Compute RegA RotateR True False :> Set rA :> Nil
+microcode RLC = mc $ Get rA :> Compute RegA RotateL True False :> Set rA :> Nil
+microcode RAR = mc $ Get rA :> Compute RegA ShiftR True False :> Set rA :> Nil
+microcode RAL = mc $ Get rA :> Compute RegA ShiftL True False :> Set rA :> Nil
 microcode (RST irq) = mc $ PushPC :> PushPC :> Rst irq :> Jump :> Nil
 microcode JMP = mc $ Imm1 :> Imm2 :> Jump :> Nil
 microcode (JMPIf cond) = mc $ Imm1 :> Imm2 :> When (Just cond) :> Jump :> Nil

@@ -51,7 +51,7 @@ data Src
     | Imm
     deriving (Eq, Ord, Show, Generic, Undefined)
 
-data ALU = ADD | ADC | SUB | SBB | AND | OR | XOR
+data ALU = ADD | ADC | SUB | SBB | AND | OR | XOR | RotateR | RotateL | ShiftR | ShiftL
     deriving (Eq, Ord, Show, Enum, Bounded, Generic, Undefined)
 
 data Cond = Cond Flag Bool

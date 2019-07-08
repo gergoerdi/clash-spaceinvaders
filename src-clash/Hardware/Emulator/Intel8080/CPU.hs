@@ -246,16 +246,6 @@ microexec Port = do
     dup x = bitCoerce (x, x)
 microexec PortIn = microexec Port
 microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
-microexec (ShiftRotate sr) = do
-    (b7, (b654321 :: Unsigned 6), b0) <- bitCoerce <$> getReg1
-    c <- getFlag fC
-    let (x', c') = case sr of
-            RotateR -> (bitCoerce (b0, b7, b654321), b0)
-            RotateL -> (bitCoerce (b654321, b0, b7), b7)
-            ShiftR -> (bitCoerce (c, b7, b654321), b0)
-            ShiftL -> (bitCoerce (b654321, b0, c), b7)
-    setFlag fC c'
-    setReg1 x'
 microexec (SetFlag flag fun0) = do
     f <- getFlag flag
     setFlag flag $ case fun0 of
