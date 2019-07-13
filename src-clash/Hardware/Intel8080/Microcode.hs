@@ -148,7 +148,6 @@ microcode RAL = mc $ shiftRotate ShiftL
 microcode (RST irq) = mc $
     pushPC >++>
     Step @Nothing @Nothing (Rst irq) >:>
-    Step @Nothing @Nothing Jump >:>
     End
 microcode JMP = mc $
     imm2 >++>

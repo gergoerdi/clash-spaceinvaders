@@ -237,7 +237,7 @@ microexec (Compute0 flag fun0) = do
     setFlag flag $ case fun0 of
         ConstTrue0 -> True
         Complement0 -> complement f
-microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
+microexec (Rst rst) = setPC $ fromIntegral rst `shiftL` 3
 microexec (SetInt b) = setInt b
 microexec UpdateFlags = do
     x <- getReg1
