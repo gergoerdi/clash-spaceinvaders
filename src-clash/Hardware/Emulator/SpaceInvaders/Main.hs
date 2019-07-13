@@ -80,7 +80,7 @@ main = do
             return s
 
     let runSome target s = do
-            let stepsPerTick = 1500
+            let stepsPerTick = 10000
             (s, i) <- ($ (s, 0)) $ fix $ \loop (s, i) -> do
                 s <- execCPU s (replicateM_ stepsPerTick step)
                 now <- ticks

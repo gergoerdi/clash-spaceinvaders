@@ -29,6 +29,8 @@ data S = MkS
     , reg1 :: Value
     , reg2 :: Addr
     , targetPort :: Bool
+    , addr :: Addr
+    , write :: Maybe Value
     }
     deriving (Show)
 
@@ -42,6 +44,8 @@ mkS = MkS{..}
     reg1 = 0
     reg2 = 0
     targetPort = False
+    addr = 0
+    write = Nothing
 
 data R = MkR
     { mem :: Mem IO Addr Value
@@ -76,6 +80,27 @@ peekByte addr = do
     x <- liftIO $ peekAt mem addr
     return x
 
+readByte :: CPU Value
+readByte = do
+    isPort <- gets targetPort
+    addr <- gets addr
+    let port = fromIntegral addr
+    if isPort
+      then readPort port
+      else peekByte addr
+
+tellWrite :: Value -> CPU ()
+tellWrite x = modify $ \s -> s{ write = Just x }
+
+writeByte :: Value -> CPU ()
+writeByte x = do
+    isPort <- gets targetPort
+    addr <- gets addr
+    let port = fromIntegral addr
+    if isPort
+      then writePort port x
+      else pokeByte addr x
+
 instance (KnownNat n) => PrintfArg (Unsigned n) where
     formatArg x = formatArg (fromIntegral x :: Integer)
 
@@ -95,17 +120,6 @@ fetchByte = do
     pc <- getPC
     setPC $ pc + 1
     peekByte pc
-
-fetchAddr :: CPU Addr
-fetchAddr = do
-    lo <- fetchByte
-    hi <- fetchByte
-    return $ bitCoerce (hi, lo)
-
-pushByte :: Value -> CPU ()
-pushByte x = do
-    sp <- modify (\s -> s{ sp = sp s - 1}) *> gets sp
-    pokeByte sp x
 
 popByte :: CPU Value
 popByte = do
@@ -145,22 +159,45 @@ interrupt instr = whenM (gets allowInterrupts) $ do
 exec :: Instr -> CPU ()
 exec instr = do
     microinit
-    let uops = microcode instr
+    let (setup, uops) = microcode instr
+    traverse_ addressing setup
     -- liftIO $ print (instr, uops)
-    mapM_ microexec uops
+    mapM_ microStep uops
 
 microinit :: CPU ()
 microinit = do
     selectPort False
 
+addressing :: Addressing -> CPU ()
+addressing Indirect = do
+    setAddr =<< getReg2
+addressing Port = do
+    (port, _) <- twist <$> getReg2
+    tellPort port
+addressing IncrPC = setAddr =<< gets pc <* modify (\s -> s{ pc = pc s + 1 })
+addressing IncrSP = setAddr =<< gets sp <* modify (\s -> s{ sp = sp s + 1 })
+addressing DecrSP = setAddr =<< modify (\s -> s{ sp = sp s - 1 }) *> gets sp
+
+setAddr :: Addr -> CPU ()
+setAddr addr = modify $ \s -> s{ addr = addr }
+
+tellPort :: Value -> CPU ()
+tellPort port = do
+    selectPort True
+    setAddr $ bitCoerce (port, port)
+
 setReg1 :: Value -> CPU ()
-setReg1 v = modify $ \s -> s{ reg1 = v }
+setReg1 v = do
+    -- liftIO $ printf "VAL  <- %02x\n" v
+    modify $ \s -> s{ reg1 = v }
 
 getReg1 :: CPU Value
 getReg1 = gets reg1
 
 setReg2 :: Addr -> CPU ()
-setReg2 addr = modify $ \s -> s{ reg2 = addr }
+setReg2 addr = do
+    -- liftIO $ printf "ADDR <- %04x\n" addr
+    modify $ \s -> s{ reg2 = addr }
 
 getReg2 :: CPU Addr
 getReg2 = gets reg2
@@ -171,55 +208,46 @@ twist x = (hi, lohi)
     (hi, lo) = bitCoerce x :: (Value, Value)
     lohi = bitCoerce (lo, hi)
 
-microexec :: MicroOp -> CPU ()
-microexec Nop = return ()
-microexec Imm1 = setReg1 =<< fetchByte
-microexec Imm2 = do
-    lo <- getReg1
-    hi <- fetchByte
-    setReg2 $ bitCoerce (hi, lo)
-microexec Jump = setPC =<< getReg2
+microStep :: MicroOp -> CPU ()
+microStep (effect, post) = do
+    modify $ \s -> s{ write = Nothing }
+    microexec effect
+    traverse_ addressing post
+    traverse_ writeByte =<< gets write
+
+microexec :: Effect -> CPU ()
+microexec (Get r) = setReg1 =<< getReg r
+microexec (Set r) = setReg r =<< getReg1
 microexec (Get2 rp) = setReg2 =<< getRegPair rp
 microexec (Swap2 rp) = do
     tmp <- getReg2
     setReg2 =<< getRegPair rp
     setRegPair rp tmp
-microexec (Get r) = setReg1 =<< getReg r
-microexec (Set r) = setReg r =<< getReg1
-microexec PushPC = do
-    (v, pc') <- twist <$> getPC
-    pushByte v
-    setPC pc'
-microexec Push = do
-    (v, addr') <- twist <$> getReg2
-    pushByte v
-    setReg2 addr'
-microexec Pop1 = do
-    x <- popByte
-    (y, _) <- twist <$> getReg2
-    setReg2 $ bitCoerce (x, y)
-microexec Pop2 = return () -- Only needed for sync RAM access
-microexec ReadMem = do
-    addr <- getReg2
-    targetPort <- gets targetPort
-    let read = if targetPort then readPort (truncateB addr) else peekByte addr
-    setReg1 =<< read
-    selectPort False
-microexec WriteMem = do
-    addr <- getReg2
-    targetPort <- gets targetPort
-    let write = if targetPort then writePort (truncateB addr) else pokeByte addr
-    write =<< getReg1
-    selectPort False
-microexec (Compute2 fun2 updateC) = do
-    arg <- case fun2 of
-        Inc2 -> return 0x0001
-        Dec2 -> return 0xffff
-        AddHL -> getRegPair rHL
-    x <- getReg2
-    let (c', x') = bitCoerce $ x `add` arg
-    setReg2 x'
-    when updateC $ setFlag fC c'
+microexec Jump = setPC =<< getReg2
+microexec (ReadMem target) = do
+    x <- readByte
+    case target of
+        ValueBuf -> setReg1 x
+        AddrBuf -> do
+            (y, _) <- twist <$> getReg2
+            setReg2 $ bitCoerce (x, y)
+        PC -> do
+            (y, _) <- twist <$> getPC
+            setPC $ bitCoerce (x, y)
+microexec (WriteMem target) = do
+    tellWrite =<< case target of
+        ValueBuf -> getReg1
+        AddrBuf -> do
+            (v, addr') <- twist <$> getReg2
+            setReg2 addr'
+            return v
+        PC -> do
+            (v, pc') <- twist <$> getPC
+            setPC pc'
+            return v
+microexec (When cond) = do
+    passed <- maybe (pure False) evalCond cond
+    guard passed
 microexec (Compute arg fun updateC updateA) = do
     c <- getFlag fC
     x <- case arg of
@@ -228,29 +256,30 @@ microexec (Compute arg fun updateC updateA) = do
         ConstFF -> pure 0xff
     y <- getReg1
     let (a', c', result) = alu fun c x y
-    when updateC $ setFlag fC c'
-    when updateA $ setFlag fA a'
+    when (updateC == SetC) $ setFlag fC c'
+    when (updateA == SetA) $ setFlag fA a'
     setReg1 result
+microexec (Compute2 fun2 updateC) = do
+    arg <- case fun2 of
+        Inc2 -> return 0x0001
+        Dec2 -> return 0xffff
+        AddHL -> getRegPair rHL
+    x <- getReg2
+    let (c', x') = bitCoerce $ x `add` arg
+    setReg2 x'
+    when (updateC == SetC) $ setFlag fC c'
+microexec (Compute0 flag fun0) = do
+    f <- getFlag flag
+    setFlag flag $ case fun0 of
+        ConstTrue0 -> True
+        Complement0 -> complement f
+microexec (Rst rst) = setPC $ fromIntegral rst `shiftL` 3
+microexec (SetInt b) = setInt b
 microexec UpdateFlags = do
     x <- getReg1
     setFlag fZ (x == 0)
     setFlag fS (x `testBit` 7)
     setFlag fP (even $ popCount x)
-microexec (When cond) = do
-    passed <- maybe (pure False) evalCond cond
-    guard passed
-microexec Port = do
-    setReg2 =<< pure . dup =<< getReg1
-    selectPort True
-  where
-    dup x = bitCoerce (x, x)
-microexec PortIn = microexec Port
-microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
-microexec (SetFlag flag fun0) = do
-    f <- getFlag flag
-    setFlag flag $ case fun0 of
-        ConstTrue0 -> True
-        Complement0 -> complement f
 microexec FixupBCD = do
     a <- getFlag fA
     c <- getFlag fC
@@ -267,7 +296,6 @@ microexec FixupBCD = do
     setFlag fA a
     setFlag fC c
     setReg1 x
-microexec (SetInt b) = setInt b
 
 selectPort :: Bool -> CPU ()
 selectPort selected = modify $ \s -> s{ targetPort = selected }
