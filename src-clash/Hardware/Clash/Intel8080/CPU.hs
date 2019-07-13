@@ -116,12 +116,18 @@ instance Intel8080 M where
     setSP addr = modify $ \s -> s{ sp = addr }
     {-# INLINE setSP #-}
 
-acceptInterrupt :: M Bool
-acceptInterrupt = do
+latchInterrupt :: M Bool
+latchInterrupt = do
     irq <- inputs cpuInIRQ
     allowed <- gets allowInterrupts
     when (irq && allowed) $ modify $ \s -> s{ interrupted = True }
     gets interrupted
+
+acceptInterrupt :: M ()
+acceptInterrupt = do
+    -- trace (show ("Interrupt accepted", pc)) $ return ()
+    modify $ \s -> s{ allowInterrupts = False, interrupted = False }
+    output $ #cpuOutIRQAck True
 
 readByte :: M Value
 readByte = maybe retry return =<< inputs cpuInMem
@@ -136,7 +142,7 @@ fetch = do
 
 cpu :: M ()
 cpu = do
-    interrupted <- acceptInterrupt
+    interrupted <- latchInterrupt
     phase <- gets phase
 
     -- traceShow phase $ return ()
@@ -146,9 +152,7 @@ cpu = do
             setReg2 =<< getPC
             goto $ Fetching False
         Fetching False | interrupted -> do
-            -- trace (show ("Interrupt accepted", pc)) $ return ()
-            modify $ \s -> s{ allowInterrupts = False, interrupted = False }
-            output $ #cpuOutIRQAck True
+            acceptInterrupt
             goto $ Fetching True
         Fetching interrupting -> do
             instr <- {- traceState $ -} decodeInstr <$> if interrupting then readByte else fetch
