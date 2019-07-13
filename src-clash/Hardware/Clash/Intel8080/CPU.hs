@@ -28,12 +28,6 @@ import Data.Maybe (fromMaybe)
 import Debug.Trace
 import Text.Printf
 
-data ReadTarget
-    = ToPC
-    | ToRegPair RegPair
-    | SwapHL Addr
-    deriving (Show, Generic, Undefined)
-
 data Phase
     = Init
     | Halted
@@ -56,7 +50,6 @@ data CPUState = CPUState
     , instrBuf :: Instr
     , valueBuf :: Value
     , addrBuf :: Addr
-    , portSelect :: Bool
     }
     deriving (Show, Generic, Undefined)
 
@@ -90,7 +83,6 @@ initState = CPUState
     , instrBuf = NOP
     , valueBuf = 0x00
     , addrBuf = 0x0000
-    , portSelect = False
     }
 
 data CPUOut = CPUOut
@@ -139,17 +131,7 @@ readByte = maybe retry return =<< inputs cpuInMem
 fetch :: M Value
 fetch = do
     x <- readByte
-    pc' <- (+ 1) <$> getPC
-    setPC pc'
-    tellAddr pc'
-    return x
-
-popByte :: M Value
-popByte = do
-    x <- readByte
-    sp <- getSP
-    setSP $ sp + 1
-    tellAddr sp
+    setPC =<< pure . (+ 1) =<< getPC
     return x
 
 cpu :: M ()
@@ -171,69 +153,65 @@ cpu = do
         Fetching interrupting -> do
             instr <- {- traceState $ -} decodeInstr <$> if interrupting then readByte else fetch
             modify $ \s -> s{ instrBuf = instr }
-            setReg2 =<< getPC
+            let (setup, _) = microcode instr
+            traverse_ addressing setup
             goto $ Executing 0
         Executing i -> do
             instr <- gets instrBuf
-            let uop = microcode instr !! i
-            -- traceShow (i, uop) $ return ()
+            let (uop, teardown) = snd (microcode instr) !! i
+            -- traceShow (i, uop, teardown) $ return ()
             microexec uop
+            traverse_ addressing teardown
             maybe nextInstr (goto . Executing) $ succIdx i
 
 nextInstr :: M ()
 nextInstr = do
-    setReg2 =<< getPC
-    -- selectPort False
+    tellAddr =<< getPC
     goto $ Fetching False
 
-microexec :: MicroOp -> M ()
-microexec Nop = return ()
-microexec Imm1 = setReg1 =<< fetch
-microexec Imm2 = do
-    lo <- getReg1
-    hi <- fetch
-    setReg2 $ bitCoerce (hi, lo)
+addressing :: Addressing -> M ()
+addressing Indirect = do
     tellAddr =<< getReg2
-microexec Jump = setPC =<< getReg2
+addressing Port = do
+    (port, _) <- twist <$> getReg2
+    tellPort port
+addressing IncrPC = tellAddr =<< gets pc <* modify (\s -> s{ pc = pc s + 1 })
+addressing IncrSP = tellAddr =<< gets sp  <* modify (\s -> s{ sp = sp s + 1 })
+addressing DecrSP = tellAddr =<< modify (\s -> s{ sp = sp s - 1 }) *> gets sp
+
+microexec :: Effect -> M ()
+microexec (Get r) = setReg1 =<< getReg r
+microexec (Set r) = setReg r =<< getReg1
 microexec (Get2 rp) = setReg2 =<< getRegPair rp
 microexec (Swap2 rp) = do
     tmp <- getReg2
     setReg2 =<< getRegPair rp
     setRegPair rp tmp
-microexec (Get r) = setReg1 =<< getReg r
-microexec (Set r) = setReg r =<< getReg1
-microexec PushPC = do
-    (v, pc') <- twist <$> getPC
-    pushByte v
-    setPC pc'
-microexec Push = do
-    (v, addr') <- twist <$> getReg2
-    pushByte v
-    setReg2 addr'
-microexec Pop1 = do
-    x <- popByte
-    (y, _) <- twist <$> getReg2
-    setReg2 $ bitCoerce (x, y)
-microexec Pop2 = do
+microexec Jump = setPC =<< getReg2
+microexec (ReadMem target) = do
     x <- readByte
-    (y, _) <- twist <$> getReg2
-    setReg2 $ bitCoerce (x, y)
-microexec ReadMem = do
-    selectPort False
-    setReg1 =<< readByte
-microexec WriteMem = do
-    tellPort =<< gets portSelect
-    tellWrite =<< getReg1
-    selectPort False
-microexec (Compute2 fun2 updateC) = do
-    arg <- case fun2 of
-        Inc2 -> return 0x0001
-        Dec2 -> return 0xffff
-        AddHL -> getRegPair rHL
-    x <- getReg2
-    let (c', x') = bitCoerce $ x `add` arg
-    setReg2 x'
-    when updateC $ setFlag fC c'
+    case target of
+        ValueBuf -> setReg1 x
+        AddrBuf -> do
+            (y, _) <- twist <$> getReg2
+            setReg2 $ bitCoerce (x, y)
+        PC -> do
+            (y, _) <- twist <$> getPC
+            setPC $ bitCoerce (x, y)
+microexec (WriteMem target) = do
+    tellWrite =<< case target of
+        ValueBuf -> getReg1
+        AddrBuf -> do
+            (v, addr') <- twist <$> getReg2
+            setReg2 addr'
+            return v
+        PC -> do
+            (v, pc') <- twist <$> getPC
+            setPC pc'
+            return v
+microexec (When cond) = do
+    passed <- maybe (pure False) evalCond cond
+    unless passed $ nextInstr >> abort
 microexec (Compute arg fun updateC updateA) = do
     c <- getFlag fC
     x <- case arg of
@@ -242,32 +220,30 @@ microexec (Compute arg fun updateC updateA) = do
         ConstFF -> pure 0xff
     y <- getReg1
     let (a', c', result) = alu fun c x y
-    when updateC $ setFlag fC c'
-    when updateA $ setFlag fA a'
+    when (updateC == SetC) $ setFlag fC c'
+    when (updateA == SetA) $ setFlag fA a'
     setReg1 result
+microexec (Compute2 fun2 updateC) = do
+    arg <- case fun2 of
+        Inc2 -> return 0x0001
+        Dec2 -> return 0xffff
+        AddHL -> getRegPair rHL
+    x <- getReg2
+    let (c', x') = bitCoerce $ x `add` arg
+    setReg2 x'
+    when (updateC == SetC) $ setFlag fC c'
+microexec (Compute0 flag fun0) = do
+    f <- getFlag flag
+    setFlag flag $ case fun0 of
+        ConstTrue0 -> True
+        Complement0 -> complement f
+microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
 microexec (SetInt b) = setInt b
 microexec UpdateFlags = do
     x <- getReg1
     setFlag fZ (x == 0)
     setFlag fS (x `testBit` 7)
     setFlag fP (even $ popCount x)
-microexec (When cond) = do
-    passed <- maybe (pure False) evalCond cond
-    unless passed $ nextInstr >> abort
-microexec Port = do
-    setReg2 =<< pure . dup =<< getReg1
-    selectPort True
-  where
-    dup x = bitCoerce (x, x)
-microexec PortIn = do
-    microexec Port
-    tellPort True
-microexec (Rst rst) = setReg2 $ fromIntegral rst `shiftL` 3
-microexec (SetFlag flag fun0) = do
-    f <- getFlag flag
-    setFlag flag $ case fun0 of
-        ConstTrue0 -> True
-        Complement0 -> complement f
 microexec FixupBCD = do
     a <- getFlag fA
     c <- getFlag fC
@@ -318,20 +294,13 @@ getInt = gets allowInterrupts
 setInt :: Bool -> M ()
 setInt allow = modify $ \s -> s{ allowInterrupts = allow }
 
-pushByte :: Value -> M ()
-pushByte x = do
-    sp <- modify (\s -> s{ sp = sp s - 1 }) *> gets sp
-    tellAddr sp
-    tellWrite x
-
 tellAddr :: Addr -> M ()
 tellAddr = output . #cpuOutMemAddr
 
 tellWrite :: Value -> M ()
 tellWrite = output . #cpuOutMemWrite . Just
 
-tellPort :: Bool -> M ()
-tellPort = output . #cpuOutPortSelect
-
-selectPort :: Bool -> M ()
-selectPort selected = modify $ \s -> s{ portSelect = selected }
+tellPort :: Value -> M ()
+tellPort port = do
+    output $ #cpuOutPortSelect True
+    tellAddr $ bitCoerce (port, port)

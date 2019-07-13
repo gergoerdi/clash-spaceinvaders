@@ -1,38 +1,54 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TemplateHaskell, StandaloneDeriving #-}
+{-# LANGUAGE GADTs, DataKinds, PolyKinds, KindSignatures, TypeFamilies, TypeApplications #-}
+{-# LANGUAGE PartialTypeSignatures, FlexibleContexts, TypeOperators #-}
 module Hardware.Intel8080.Microcode where
 
 import Prelude ()
 import Clash.Prelude
-import Hardware.Intel8080
 
-data MicroOp
-    = Imm1
-    | Imm2
+import Data.Singletons.TH hiding (Undefined)
+import Hardware.Intel8080
+import Hardware.Intel8080.Star
+
+$(singletons [d|
+  data Addressing
+      = Indirect
+      | Port
+      | IncrPC
+      | IncrSP
+      | DecrSP
+  |])
+deriving instance Show Addressing
+
+data UpdateA
+    = SetA
+    | KeepA
+    deriving (Show, Eq, Generic, Undefined)
+
+data UpdateC
+    = SetC
+    | KeepC
+    deriving (Show, Eq, Generic, Undefined)
+
+data Effect
+    = Get Reg
+    | Set Reg
     | Get2 RegPair
     | Swap2 RegPair
-    | Get Reg
-    | Set Reg
-    | ReadMem
-    | WriteMem
     | Jump
-    | PushPC
+    | ReadMem Target
+    | WriteMem Target
     | When (Maybe Cond)
-    | Push
-    | Pop1
-    | Pop2
-    | Port
-    | PortIn
-    | Compute ArgA ALU Bool Bool
+    | Compute ALUArg ALU UpdateC UpdateA
+    | Compute2 ALU2 UpdateC
+    | Compute0 Flag ALU0
     | UpdateFlags
-    | Compute2 ALU2 Bool
-    | FixupBCD
-    | SetFlag Flag ALU0
-    | SetInt Bool
     | Rst (Unsigned 3)
-    | Nop
+    | SetInt Bool
+    | FixupBCD
     deriving (Show, Generic, Undefined)
 
-data ArgA
+data ALUArg
     = RegA
     | Const01
     | ConstFF
@@ -49,72 +65,245 @@ data ALU0
     | ConstTrue0
     deriving (Show, Generic, Undefined)
 
-type MicroLen = 8
-type Microcode = Vec MicroLen MicroOp
+data Target
+    = ValueBuf
+    | AddrBuf
+    | PC
+    deriving (Show, Generic, Undefined)
 
-mc :: (KnownNat m, (n + m) ~ MicroLen) => Vec n MicroOp -> Microcode
-mc ops = ops ++ pure (When Nothing)
+type MacroSteps ends n = Star ends n Effect
+
+imm1 = Step @(Just IncrPC) @Nothing (ReadMem ValueBuf) >:> End
+
+imm2 =
+    Step @(Just IncrPC) @Nothing (ReadMem AddrBuf) >:>
+    Step @(Just IncrPC) @Nothing (ReadMem AddrBuf) >:>
+    End
+
+push2 =
+    Step @Nothing @(Just DecrSP) (WriteMem AddrBuf) >:>
+    Step @Nothing @(Just DecrSP) (WriteMem AddrBuf) >:>
+    End
+
+pushPC =
+    Step @Nothing @(Just DecrSP) (WriteMem PC) >:>
+    Step @Nothing @(Just DecrSP) (WriteMem PC) >:>
+    End
+
+pop2 =
+    Step @(Just IncrSP) @Nothing (ReadMem AddrBuf) >:>
+    Step @(Just IncrSP) @Nothing (ReadMem AddrBuf) >:>
+    End
+
+shiftRotate op =
+    Step @Nothing @Nothing (Get rA) >:>
+    Step @Nothing @Nothing (Compute RegA op SetC KeepA) >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+
+type MicroOp = (Effect, Maybe Addressing)
+type MicroLen = 8
+type Microcode = (Maybe Addressing, Vec MicroLen MicroOp)
+
+mc :: (KnownNat m, (n + m) ~ MicroLen) => MacroSteps _ n -> Microcode
+mc ops = let (first, ops') = stepsOf ops
+         in (first, ops' ++ pure (When Nothing, Nothing))
+
+evalSrc src k = case src of
+    Imm -> mc $ imm1 >++> k
+    Op (Reg r) -> mc $ Step @Nothing @Nothing (Get r) >:> k
+    Op AddrHL -> mc $
+        Step @Nothing @Nothing (Get2 rHL) >:>
+        Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+        k
 
 microcode :: Instr -> Microcode
-microcode NOP = mc Nil
--- microcode HLT = toMC _
-microcode (INT b) = mc $ SetInt b :> Nil
-microcode CMA = mc $ Get rA :> Compute ConstFF SUB False False :> Set rA :> Nil
-microcode CMC = mc $ SetFlag fC Complement0 :> Nil
-microcode STC = mc $ SetFlag fC ConstTrue0 :> Nil
-microcode (ALU alu src) = mc $ read ++ Compute RegA alu True True :> UpdateFlags :> Set rA :> Nil
-  where
-    read = case src of
-        Imm -> Imm1 :> Nop :> Nil
-        Op (Reg r) -> Get r :> Nop :> Nil
-        Op AddrHL -> Get2 rHL :> ReadMem :> Nil
-microcode (CMP src) = mc $ read ++ Compute RegA SUB True True :> UpdateFlags :> Nil
-  where
-    read = case src of
-        Imm -> Imm1 :> Nop :> Nil
-        Op (Reg r) -> Get r :> Nop :> Nil
-        Op AddrHL -> Get2 rHL :> ReadMem :> Nil
-microcode RRC = mc $ Get rA :> Compute RegA RotateR True False :> Set rA :> Nil
-microcode RLC = mc $ Get rA :> Compute RegA RotateL True False :> Set rA :> Nil
-microcode RAR = mc $ Get rA :> Compute RegA ShiftR True False :> Set rA :> Nil
-microcode RAL = mc $ Get rA :> Compute RegA ShiftL True False :> Set rA :> Nil
-microcode (RST irq) = mc $ PushPC :> PushPC :> Rst irq :> Jump :> Nil
-microcode JMP = mc $ Imm1 :> Imm2 :> Jump :> Nil
-microcode (JMPIf cond) = mc $ Imm1 :> Imm2 :> When (Just cond) :> Jump :> Nil
-microcode CALL = mc $ Imm1 :> Imm2 :> PushPC :> PushPC :> Jump :> Nil
-microcode (CALLIf cond) = mc $ Imm1 :> Imm2 :> When (Just cond) :> PushPC :> PushPC :> Jump :> Nil
-microcode RET = mc $ Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
-microcode (RETIf cond) = mc $ When (Just cond) :> Pop1 :> Pop1 :> Pop2 :> Jump :> Nil
-microcode LDA = mc $ Imm1 :> Imm2 :> ReadMem :> Set rA :> Nil
-microcode STA = mc $ Imm1 :> Imm2 :> Get rA :> WriteMem :> Nil
-microcode (LDAX rp) = mc $ Get2 rp :> ReadMem :> Set rA :> Nil
-microcode (STAX rp) = mc $ Get2 rp :> Get rA :> WriteMem :> Nil
-microcode (DCX rp) = mc $ Get2 rp :> Compute2 Dec2 False :> Swap2 rp :> Nil
-microcode (INX rp) = mc $ Get2 rp :> Compute2 Inc2 False :> Swap2 rp :> Nil
-microcode (INR AddrHL) = mc $ Get2 rHL :> ReadMem :> Compute Const01 ADD False True :> UpdateFlags :> WriteMem :> Nil
-microcode (INR (Reg r)) = mc $ Get r :> Compute Const01 ADD False True :> UpdateFlags :> Set r :> Nil
-microcode (DCR AddrHL) = mc $ Get2 rHL :> ReadMem :> Compute ConstFF ADD False True :> UpdateFlags :> WriteMem :> Nil
-microcode (DCR (Reg r)) = mc $ Get r :> Compute ConstFF ADD False True :> UpdateFlags :> Set r :> Nil
-microcode (DAD rp) = mc $ Get2 rp :> Compute2 AddHL True :> Swap2 rHL :> Nil
-microcode DAA = mc $ Get rA :> FixupBCD :> UpdateFlags :> Set rA :> Nil
-microcode (LXI rp) = mc $ Imm1 :> Imm2 :> Swap2 rp :> Nil
-microcode PCHL = mc $ Get2 rHL :> Jump :> Nil
-microcode SPHL = mc $ Get2 rHL :> Swap2 SP :> Nil
-microcode LHLD = mc $ Imm1 :> Imm2 :> ReadMem :> Set rL :> Compute2 Inc2 False :> ReadMem :> Set rH :> Nil
-microcode SHLD = mc $ Imm1 :> Imm2 :> Get rL :> WriteMem :> Compute2 Inc2 False :> Get rH :> WriteMem :> Nil
-microcode XTHL = mc $ Pop1 :> Pop1 :> Pop2 :> Swap2 rHL :> Push :> Push :> Nil
-microcode (PUSH rp) = mc $ Get2 rp :> Push :> Push :> Nil
-microcode (POP rp) = mc $ Pop1 :> Pop1 :> Pop2 :> Swap2 rp :> Nil
-microcode (MOV dst src) = mc $ read ++ write
-  where
-    read = case src of
-        Imm -> Imm1 :> Nop :> Nil
-        Op (Reg r) -> Get r :> Nop :> Nil
-        Op AddrHL -> Get2 rHL :> ReadMem :> Nil
-    write = case dst of
-        Reg r -> Set r :> Nop :> Nil
-        AddrHL -> Get2 rHL :> WriteMem :> Nil
-microcode XCHG = mc $ Get2 rHL :> Swap2 rDE :> Swap2 rHL :> Nil
-microcode OUT = mc $ Imm1 :> Port :> Get rA :> WriteMem :> Nil
-microcode IN = mc $ Imm1 :> PortIn :> ReadMem :> Set rA :> Nil
-microcode instr = errorX $ show instr
+microcode NOP = mc End
+-- microcode HLT = mc _
+microcode (INT b) = mc $ Step @Nothing @Nothing (SetInt b) >:> End
+microcode CMA = mc $
+    Step @Nothing @Nothing (Get rA) >:>
+    Step @Nothing @Nothing (Compute ConstFF SUB KeepC KeepA) >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+microcode CMC = mc $
+    Step @Nothing @Nothing (Compute0 fC Complement0) >:>
+    End
+microcode STC = mc $
+    Step @Nothing @Nothing (Compute0 fC ConstTrue0) >:>
+    End
+microcode (ALU fun src) = evalSrc src $
+    Step @Nothing @Nothing (Compute RegA fun SetC SetA) >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+microcode (CMP src) = evalSrc src $
+    Step @Nothing @Nothing (Compute RegA SUB SetC SetA) >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    End
+microcode RRC = mc $ shiftRotate RotateR
+microcode RLC = mc $ shiftRotate RotateL
+microcode RAR = mc $ shiftRotate ShiftR
+microcode RAL = mc $ shiftRotate ShiftL
+microcode (RST irq) = mc $
+    pushPC >++>
+    Step @Nothing @Nothing (Rst irq) >:>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode JMP = mc $
+    imm2 >++>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode (JMPIf cond) = mc $
+    imm2 >++>
+    Step @Nothing @Nothing (When $ Just cond) >:>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode CALL = mc $
+    imm2 >++>
+    pushPC >++>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode (CALLIf cond) = mc $
+    imm2 >++>
+    Step @Nothing @Nothing (When $ Just cond) >:>
+    pushPC >++>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode RET = mc $
+    pop2 >++>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode (RETIf cond) = mc $
+    Step @Nothing @Nothing (When $ Just cond) >:>
+    pop2 >++>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode LDA = mc $
+    imm2 >++>
+    Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+microcode STA = mc $
+    imm2 >++>
+    Step @Nothing @Nothing (Get rA) >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    End
+microcode (LDAX rp) = mc $
+    Step @Nothing @Nothing (Get2 rp) >:>
+    Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+microcode (STAX rp) = mc $
+    Step @Nothing @Nothing (Get2 rp) >:>
+    Step @Nothing @Nothing (Get rA) >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    End
+microcode (DCX rp) = mc $
+    Step @Nothing @Nothing (Get2 rp) >:>
+    Step @Nothing @Nothing (Compute2 Dec2 KeepC) >:>
+    Step @Nothing @Nothing (Swap2 rp) >:>
+    End
+microcode (INX rp) = mc $
+    Step @Nothing @Nothing (Get2 rp) >:>
+    Step @Nothing @Nothing (Compute2 Inc2 KeepC) >:>
+    Step @Nothing @Nothing (Swap2 rp) >:>
+    End
+microcode (INR AddrHL) = mc $
+    Step @Nothing @Nothing (Get2 rHL) >:>
+    Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Compute Const01 ADD KeepC SetA) >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    End
+microcode (INR (Reg r)) = mc $
+    Step @Nothing @Nothing (Get r) >:>
+    Step @Nothing @Nothing (Compute Const01 ADD KeepC SetA) >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    Step @Nothing @Nothing (Set r) >:>
+    End
+microcode (DCR AddrHL) = mc $
+    Step @Nothing @Nothing (Get2 rHL) >:>
+    Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Compute ConstFF ADD KeepC SetA) >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    End
+microcode (DCR (Reg r)) = mc $
+    Step @Nothing @Nothing (Get r) >:>
+    Step @Nothing @Nothing (Compute ConstFF ADD KeepC SetA) >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    Step @Nothing @Nothing (Set r) >:>
+    End
+microcode (DAD rp) = mc $
+    Step @Nothing @Nothing (Get2 rp) >:>
+    Step @Nothing @Nothing (Compute2 AddHL SetC) >:>
+    Step @Nothing @Nothing (Swap2 rHL) >:>
+    End
+microcode DAA = mc $
+    Step @Nothing @Nothing (Get rA) >:>
+    Step @Nothing @Nothing FixupBCD >:>
+    Step @Nothing @Nothing UpdateFlags >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+microcode (LXI rp) = mc $
+    imm2 >++>
+    Step @Nothing @Nothing (Swap2 rp) >:>
+    End
+microcode PCHL = mc $
+    Step @Nothing @Nothing (Get2 rHL) >:>
+    Step @Nothing @Nothing Jump >:>
+    End
+microcode SPHL = mc $
+    Step @Nothing @Nothing (Get2 rHL) >:>
+    Step @Nothing @Nothing (Swap2 SP) >:>
+    End
+microcode LHLD = mc $
+    imm2 >++>
+    Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Set rL) >:>
+    Step @Nothing @Nothing (Compute2 Inc2 KeepC) >:>
+    Step @(Just Indirect) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Set rH) >:>
+    End
+microcode SHLD = mc $
+    imm2 >++>
+    Step @Nothing @Nothing (Get rL) >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    Step @Nothing @Nothing (Compute2 Inc2 KeepC) >:>
+    Step @Nothing @Nothing (Get rH) >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    End
+microcode XTHL = mc $
+    pop2 >++>
+    Step @Nothing @Nothing (Swap2 rHL) >:>
+    push2
+microcode (PUSH rp) = mc $
+    Step @Nothing @Nothing (Get2 rp) >:>
+    push2
+microcode (POP rp) = mc $
+    pop2 >++>
+    Step @Nothing @Nothing (Swap2 rp) >:> End
+microcode (MOV (Reg r) src) = evalSrc src $
+    Step @Nothing @Nothing (Set r) >:>
+    End
+microcode (MOV AddrHL src) = evalSrc src $
+    Step @Nothing @Nothing (Get2 rHL) >:>
+    Step @Nothing @(Just Indirect) (WriteMem ValueBuf) >:>
+    End
+microcode XCHG = mc $
+    Step @Nothing @Nothing (Get2 rHL) >:>
+    Step @Nothing @Nothing (Swap2 rDE) >:>
+    Step @Nothing @Nothing (Swap2 rHL) >:>
+    End
+microcode IN = mc $
+    Step @(Just IncrPC) @Nothing (ReadMem AddrBuf) >:>
+    Step @(Just 'Port) @Nothing (ReadMem ValueBuf) >:>
+    Step @Nothing @Nothing (Set rA) >:>
+    End
+microcode OUT = mc $
+    Step @(Just IncrPC) @Nothing (ReadMem AddrBuf) >:>
+    Step @Nothing @Nothing (Get rA) >:>
+    Step @Nothing @(Just 'Port) (WriteMem ValueBuf) >:>
+    End
+-- -- microcode instr = errorX $ show instr
