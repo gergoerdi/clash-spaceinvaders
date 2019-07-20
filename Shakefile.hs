@@ -19,8 +19,7 @@ clashProject = ClashProject
     , clashTopName = "SpaceInvaders"
     , topName = "Top"
     , clashFlags =
-        [ "-iclash-utils/src-clash"
-        , "-Wno-partial-type-signatures"
+        [ "-Wno-partial-type-signatures"
         , "-fclash-inline-limit=60"
         , "-fclash-intwidth=32"
         ]

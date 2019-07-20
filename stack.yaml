@@ -6,6 +6,9 @@ packages:
       commit: f5ce90ce1
     extra-dep: false
 
+  - clash-utils
+  - clash-intel8080
+
 extra-deps:
 #  - ghc-typelits-natnormalise-0.6.2
 #  - ghc-typelits-knownnat-0.6
@@ -16,7 +19,8 @@ extra-deps:
     - clash-prelude
     - clash-lib
     - clash-ghc
-    - clash-cosim
 
   - git: https://github.com/clash-lang/ghc-typelits-extra
     commit: 145a1a524d9ee163887e7da2edc11cd2ff977ab8
+
+  - higgledy-0.3.0.0

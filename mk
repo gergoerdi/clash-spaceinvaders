@@ -1,1 +1,1 @@
-stack runhaskell -- -iclash-utils/shake Shakefile.hs $@
+stack runhaskell -- -iclash-shake/shake Shakefile.hs $@

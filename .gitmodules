@@ -1,3 +1,9 @@
 [submodule "clash-utils"]
 	path = clash-utils
 	url = git@github.com:gergoerdi/clash-utils
+[submodule "clash-shake"]
+	path = clash-shake
+	url = https://github.com/gergoerdi/clash-shake
+[submodule "clash-intel8080"]
+	path = clash-intel8080
+	url = https://github.com/gergoerdi/clash-intel8080
