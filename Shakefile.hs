@@ -26,7 +26,7 @@ clashProject = ClashProject
         , "-fclash-inline-limit=60"
         , "-fclash-intwidth=32"
         ]
-    , shakeDir = "clash-utils/shake"
+    , shakeDir = "clash-shake/shake"
     , extraGenerated = \ClashKit{..} -> [buildDir </> "image.hex"]
     }
 
