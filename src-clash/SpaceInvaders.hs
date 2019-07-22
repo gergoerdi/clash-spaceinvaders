@@ -108,7 +108,7 @@ inputsFromKeyboard scanCode = bundle (dips, coin, p1, p2)
                 KeyPress -> True
                 KeyRelease -> False
 
-    coin = boolToBit <$> held 0x021 -- 'c'
+    coin = boolToBit <$> held 0x029 -- 'Space'
 
     p1 = fmap bitCoerce . bundle $
          ( held 0x05a -- 'Enter'
@@ -117,7 +117,12 @@ inputsFromKeyboard scanCode = bundle (dips, coin, p1, p2)
          , held 0x174 -- 'Right'
          )
 
-    p2 = pure 0b0000
+    p2 = fmap bitCoerce . bundle $
+         ( held 0x00d -- 'Tab'
+         , held 0x014 -- 'Left CTRL'
+         , held 0x01a -- 'Z'
+         , held 0x022 -- 'X'
+         )
 
 -- We want port reads to potentially trigger effects!
 -- (e.g. MOS VIC-II clears sprite collision register on read)
