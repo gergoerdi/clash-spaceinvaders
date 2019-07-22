@@ -1,4 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, TypeApplications, DataKinds, GADTs #-}
+{-# LANGUAGE TypeOperators, NoStarIsType #-}
 module Hardware.Clash.SpaceInvaders.Shifter where
 
 import Clash.Prelude

@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, DataKinds, TypeOperators, GADTs #-}
 {-# LANGUAGE ApplicativeDo #-}
 module Hardware.Clash.SpaceInvaders.ShiftOut where
 

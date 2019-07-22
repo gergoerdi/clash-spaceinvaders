@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, TupleSections #-}
-{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE PartialTypeSignatures, DataKinds, TypeOperators #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeSynonymInstances #-}
