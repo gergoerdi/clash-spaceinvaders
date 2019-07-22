@@ -10,6 +10,8 @@ import Hardware.Clash.Intel8080.CPU
 import Hardware.Clash.Intel8080.Interruptor
 import Hardware.Clash.SpaceInvaders.Shifter
 import Hardware.Clash.SpaceInvaders.ShiftOut
+import Hardware.Clash.SpaceInvaders.Input
+import Hardware.Clash.SpaceInvaders.KeyboardInput
 
 import Clash.Prelude hiding (clkPeriod)
 import Cactus.Clash.Util
@@ -77,52 +79,8 @@ topEntity = exposeClockResetEnable board
     board (ps2Clk, ps2Data) = vgaOut
       where
         ps2 = parseScanCode $ decodePS2 $ samplePS2 PS2{..}
-        inputs = inputsFromKeyboard ps2
-        (vidRead, _) = mainBoard inputs irq vidAddr
+        (vidRead, _) = mainBoard (inputsFromKeyboard ps2) irq vidAddr
         (vidAddr, irq, vgaOut) = videoBoard vidRead
-
-type Inputs = (BitVector 8, Bit, JoyInput, JoyInput)
-
-inputsFromKeyboard
-    :: (HiddenClockResetEnable dom)
-    => Signal dom (Maybe ScanCode)
-    -> Signal dom Inputs
-inputsFromKeyboard scanCode = bundle (dips, coin, p1, p2)
-  where
-    dips = regMaybe 0x00 $ do
-        scanCode <- scanCode
-        dips <- dips
-        pure $ do
-            ScanCode KeyPress key <- scanCode
-            idx <- do
-                -- TODO
-                Nothing
-            return $ complementBit dips idx
-
-    held code = regMaybe False $ do
-        scanCode <- scanCode
-        pure $ do
-            ScanCode ev code' <- scanCode
-            guard $ code' == code
-            return $ case ev of
-                KeyPress -> True
-                KeyRelease -> False
-
-    coin = boolToBit <$> held 0x029 -- 'Space'
-
-    p1 = fmap bitCoerce . bundle $
-         ( held 0x05a -- 'Enter'
-         , held 0x114 -- 'Right CTRL'
-         , held 0x16b -- 'Left'
-         , held 0x174 -- 'Right'
-         )
-
-    p2 = fmap bitCoerce . bundle $
-         ( held 0x00d -- 'Tab'
-         , held 0x014 -- 'Left CTRL'
-         , held 0x01a -- 'Z'
-         , held 0x022 -- 'X'
-         )
 
 -- We want port reads to potentially trigger effects!
 -- (e.g. MOS VIC-II clears sprite collision register on read)
@@ -130,8 +88,6 @@ data PortCommand
     = ReadPort Port
     | WritePort Port Value
     deriving (Generic, Undefined, Show)
-
-type JoyInput = BitVector 4
 
 ports
     :: (HiddenClockResetEnable dom)
