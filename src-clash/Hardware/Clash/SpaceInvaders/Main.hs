@@ -62,13 +62,13 @@ main = do
     shifter <- shifter
     inputPorts <- inputPorts
 
-    let readPort = const $ \port -> case port of
+    let inPort = const $ \port -> case port of
             0x00 -> readPort0 inputPorts
             0x01 -> readPort1 inputPorts
             0x02 -> readPort2 inputPorts
             0x03 -> readValue shifter
             _ -> return 0x00
-        writePort = const $ \port -> case port of
+        outPort = const $ \port -> case port of
             0x02 -> writeAmount shifter
             0x04 -> writeValue shifter
             _ -> \_ -> return ()

@@ -59,17 +59,17 @@ main = do
     shifter <- shifter
     inputPorts <- inputPorts
 
-    let readPort = \port -> case port of
+    let inPort = \port -> case port of
             0x00 -> readPort0 inputPorts
             0x01 -> readPort1 inputPorts
             0x02 -> readPort2 inputPorts
             0x03 -> readValue shifter
             _ -> return 0x00
-        writePort = \port -> case port of
+        outPort = \port -> case port of
             0x02 -> writeAmount shifter
             0x04 -> writeValue shifter
             _ -> \_ -> return ()
-    r <- mkR mem readPort writePort
+    r <- mkR mem inPort outPort
 
     let frameTime = 1000 `div` screenRefreshRate
 
