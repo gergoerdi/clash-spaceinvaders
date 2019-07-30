@@ -6,6 +6,9 @@ packages:
       commit: f5ce90ce1
     extra-dep: false
 
+  - clash-utils
+  - clash-intel8080
+
 extra-deps:
 #  - ghc-typelits-natnormalise-0.6.2
 #  - ghc-typelits-knownnat-0.6

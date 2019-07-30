@@ -20,9 +20,6 @@ clashProject = ClashProject
     , topName = "Top"
     , clashFlags =
         [ "-Wno-partial-type-signatures"
-        , "-iclash-utils/src"
-        , "-iclash-intel8080/src"
-        , "-Wno-partial-type-signatures"
         , "-fclash-inline-limit=60"
         , "-fclash-intwidth=32"
         ]
