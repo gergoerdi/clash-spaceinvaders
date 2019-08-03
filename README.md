@@ -47,15 +47,15 @@ mapped to anything.
 # Building
 
 Included are rudimentary Shake rules to build for the Xilinx Spartan-6
-based Papilio Pro with the Arcade mega-wing. There are also some files
-for building for the Altera Cyclone-V-based DE10-Nano, but there is no
-input support for DE10-Nano yet.
+based Papilio Pro or the Spartan-3 based Papilio One, both with the
+Arcade mega-wing. There are also some files for building for the
+Altera Cyclone-V-based DE10-Nano, but there is no input support for
+DE10-Nano yet.
 
 Make a file called `build.mk` with content similar to the following:
 
 ```
-BOARD = papilio-pro
-BOARDCONFIG = arcade
+TARGET = papilio-pro-arcade
 CLASH = stack exec --
 XILINX = ~/prog/docker/xilinx-ubuntu-12.04/run
 ```
