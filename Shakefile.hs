@@ -43,6 +43,7 @@ main = clashShake clashProject $ do
     kit@ClashKit{..} <- clashRules Verilog "src-clash" roms
     xilinxISE kit papilioPro "target/papilio-pro-arcade" "papilio-pro-arcade"
     xilinxISE kit papilioOne "target/papilio-one-arcade" "papilio-one-arcade"
+    xilinxVivado kit nexysA750T "target/nexys-a7-50t" "nexys-a7-50t"
 
     lift $ do
       buildDir <//> "image.hex" %> \out -> do
