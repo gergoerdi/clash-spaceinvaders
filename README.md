@@ -46,23 +46,31 @@ mapped to anything.
 
 # Building
 
-Included are rudimentary Shake rules to build for the Xilinx Spartan-6
-based Papilio Pro or the Spartan-3 based Papilio One, both with the
-Arcade mega-wing. There are also some files for building for the
-Altera Cyclone-V-based DE10-Nano, but there is no input support for
-DE10-Nano yet.
+Included are rudimentary Shake rules to build for various hobbyist
+FPGA dev boards:
+
+* The Xilinx Spartan-6 based Papilio Pro or the Spartan-3 based
+Papilio One, both with the Arcade mega-wing. These use the Xilinx ISE
+toolchain.
+
+* [WIP] The Xilinx Artrix-7 based Nexys A7 50T. This uses the Xilinx Vivado
+  toolchain.
+
+* [WIP] The Altera Cyclone-V based DE10-Nano, using the Altera Quartus
+toolchain. Note that there is no input support for the DE10-Nano yet.
 
 Make a file called `build.mk` with content similar to the following:
 
 ```
 TARGET = papilio-pro-arcade
 CLASH = stack exec --
-XILINX = ~/prog/docker/xilinx-ubuntu-12.04/run
+ISE = ~/prog/docker/xilinx-ubuntu-12.04/run
+VIVADO = ~/prog/docker/xilinx-2019.1-ubuntu-18.04/run
 ```
 
-The `CLASH` and `XILINX` fields are to optionally wrap invocations of
-the CLaSH compiler and the Xilinx ISE toolchain in case you want to
-run them via Stack, Docker, etc.
+The `CLASH`, `ISE` and `VIVADO` fields are to optionally wrap
+invocations of the CLaSH compiler and the Xilinx ISE / Vivado
+toolchain in case you want to run them via Stack, Docker, Nix, etc.
 
 Then you can build for the Papilio Pro by running the included `mk`
 script.
