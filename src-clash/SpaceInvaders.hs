@@ -19,7 +19,6 @@ import Cactus.Clash.Clock
 import Cactus.Clash.VGA
 import Cactus.Clash.PS2
 import Cactus.Clash.CPU
-import Cactus.Clash.TH.InitRAM
 import Data.Maybe (fromMaybe, isJust, fromJust)
 import Control.Monad (guard, msum)
 import Control.Arrow (first)
@@ -223,8 +222,8 @@ mainBoard inputs irq vidAddrVid = ((vidRead), bundle (cpuState, cpuOut, read, po
             return (addr', val)
 
     progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
-    mainRAM addr = $(blockRam_ 0x0400 8) (addr :: _ (Unsigned 10)) ramWrite
-    vidRAM addr = $(blockRam_ 7168 8) addr vidWrite
+    mainRAM addr = blockRamU NoClearOnReset (SNat @0x0400) (const 0) (addr :: _ (Unsigned 10)) ramWrite
+    vidRAM addr = blockRamU NoClearOnReset (SNat @7168) (const 0) addr vidWrite
 
     vidRead = vidRAM vidAddr
 
