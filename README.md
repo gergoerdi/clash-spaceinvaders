@@ -24,9 +24,9 @@ machine by Taito.
 * **Video**: Standard 640x480@60Hz VGA, with 25.175MHz pixel
   clock. Logical "pixels" are scaled 2x2, but the layout is not
   rotated to keep interrupt timings.
-* **Framebuffer**: To keep the implementation simple, there is no
-  CPU/video contention: framebuffer writes are simply forked into a
-  second RAM that is read from only by the video system.
+* **Framebuffer**: The video system has priority over the CPU: memory
+  reads from the framebuffer area will block the CPU until the video
+  system is done reading.
 * **Sound**: Unimplemented.
 * **Inputs**: PS/2 keyboard. `C` to deposit a coin, `Enter` to start
   1P game, and `Left` / `Right` / `RCtrl` to move and fire with P1.
@@ -41,8 +41,7 @@ the video system.
 
 Sound is not implemented at all.
 
-The back-panel DIP switches and player two's buttons are not yet
-mapped to anything.
+The back-panel DIP switches are not yet mapped to anything.
 
 # Building
 
