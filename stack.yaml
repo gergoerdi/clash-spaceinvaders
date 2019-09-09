@@ -1,4 +1,4 @@
-resolver: lts-13.28
+resolver: clash-1.0.yaml
 
 packages:
   - location:
@@ -8,22 +8,3 @@ packages:
 
   - clash-utils
   - clash-intel8080
-
-extra-deps:
-#  - ghc-typelits-natnormalise-0.6.2
-#  - ghc-typelits-knownnat-0.6
-#  - ghc-typelits-extra-0.3.1
-  - git: git@github.com:clash-lang/clash-compiler
-    commit: b89010af3bad709ec7554dd393ef3b42a4173fa4
-    subdirs:
-    - clash-prelude
-    - clash-lib
-    - clash-ghc
-
-  - git: https://github.com/clash-lang/ghc-typelits-extra
-    commit: a8de0b68b8216411cb862195354f251cd41bae50
-
-  - type-errors-0.2.0.0@sha256:b8f97a0cf72f4fcdc9bfd02d753f84e65e5e5d165d53f82947a95cdcbd7f2945
-  - first-class-families-0.5.0.0@sha256:6e1488c502d5b1e780739a53edab65a307c6bf94d4232fab70e696e87f0fa087
-
-  - higgledy-0.3.0.0

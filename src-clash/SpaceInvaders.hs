@@ -28,7 +28,7 @@ import Text.Printf
 import qualified Data.List as L
 
 -- | 25.175 MHz clock, needed for the VGA mode we use.
-createDomain vSystem{vTag="Dom25", vPeriod = fromHz 25_175_000}
+createDomain vSystem{vName="Dom25", vPeriod = fromHz 25_175_000}
 
 type Red   = Unsigned 8
 type Green = Unsigned 8
@@ -86,7 +86,7 @@ topEntity = exposeClockResetEnable board
 data PortCommand
     = ReadPort Port
     | WritePort Port Value
-    deriving (Generic, Undefined, Show)
+    deriving (Generic, NFDataX, Show)
 
 ports
     :: (HiddenClockResetEnable dom)

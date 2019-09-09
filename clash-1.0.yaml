@@ -1,0 +1,13 @@
+resolver: lts-13.28
+name: clash-1.0
+
+packages:
+  - clash-ghc-1.0.0
+  - clash-prelude-1.0.0
+  - clash-lib-1.0.0
+
+  - ghc-typelits-extra-0.3.1
+  - type-errors-0.2.0.0
+  - first-class-families-0.5.0.0
+
+  - higgledy-0.3.0.0
