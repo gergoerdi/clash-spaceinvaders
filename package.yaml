@@ -1,0 +1,15 @@
+name: clash-spaceinvaders
+version: 0.1.0
+category: hardware
+
+dependencies:
+  - base
+  - clash-prelude
+  - clash-lib
+  - clash-ghc
+  - shake
+  - mustache
+  - higgledy
+
+source-dirs:
+  - src-clash
