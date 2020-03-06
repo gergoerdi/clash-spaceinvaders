@@ -13,3 +13,7 @@ dependencies:
 
 source-dirs:
   - src-clash
+
+library:
+  exposed-modules:
+    - SpaceInvaders
