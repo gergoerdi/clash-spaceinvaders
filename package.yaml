@@ -7,13 +7,57 @@ dependencies:
   - clash-prelude
   - clash-lib
   - clash-ghc
-  - shake
-  - mustache
-  - higgledy
+  - ghc-typelits-natnormalise
+  - ghc-typelits-extra
+  - ghc-typelits-knownnat
+  
+  - clash-shake
+  - intel8080
+  - retroclash-lib
+  - retroclash-sim
+
+  - bytestring
+  - mtl
+  - transformers
+
+# Anything that Clash uses by default should go here
+default-extensions:
+  - BinaryLiterals
+  - ConstraintKinds
+  - DataKinds
+  - DeriveAnyClass
+  - DeriveGeneric
+  - DeriveLift
+  - DerivingStrategies
+  - ExplicitForAll
+  - ExplicitNamespaces
+  - FlexibleContexts
+  - FlexibleInstances
+  - KindSignatures
+  - MagicHash
+  - MonoLocalBinds
+  - NoImplicitPrelude
+  - NoMonomorphismRestriction
+  - NoStarIsType
+  - NoStrictData
+  - NoStrict
+  - QuasiQuotes
+  - ScopedTypeVariables
+  - TemplateHaskellQuotes
+  - TemplateHaskell
+  - TypeApplications
+  - TypeFamilies
+  - TypeInType
+  - TypeOperators
+
+ghc-options:
+  -fplugin GHC.TypeLits.KnownNat.Solver
+  -fplugin GHC.TypeLits.Normalise
+  -fplugin GHC.TypeLits.Extra.Solver
 
 source-dirs:
-  - src-clash
-
+  - src
+  
 library:
   exposed-modules:
     - SpaceInvaders

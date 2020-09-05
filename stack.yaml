@@ -1,14 +1,13 @@
-resolver: clash-1.2.yaml
-
-allow-newer: true
-
-packages:
-  - '.'
-  - clash-utils
-  - clash-intel8080
+resolver: clash-HEAD.yaml
 
 extra-deps:
-   - barbies-2.0.0.0
-   - named-0.3.0.1
-   - higgledy-0.3.1.0
-   - concurrent-supply-0.1.8
+  - clash-shake
+  - retroclash-lib
+  - retroclash-sim
+
+  - barbies-2.0.1.0
+  - barbies-th-0.1.2
+
+packages:
+  - clash-intel8080
+  - .

@@ -7,3 +7,9 @@
 [submodule "clash-intel8080"]
 	path = clash-intel8080
 	url = https://github.com/gergoerdi/clash-intel8080
+[submodule "retroclash-lib"]
+	path = retroclash-lib
+	url = git@github.com:gergoerdi/retroclash-lib.git
+[submodule "retroclash-sim"]
+	path = retroclash-sim
+	url = git@github.com:gergoerdi/retroclash-sim.git

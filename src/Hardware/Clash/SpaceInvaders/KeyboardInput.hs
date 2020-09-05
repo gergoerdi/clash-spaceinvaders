@@ -6,7 +6,7 @@ module Hardware.Clash.SpaceInvaders.KeyboardInput
 import Clash.Prelude
 import Control.Monad (guard)
 import Hardware.Clash.SpaceInvaders.Input
-import Cactus.Clash.PS2
+import RetroClash.PS2
 
 inputsFromKeyboard
     :: (HiddenClockResetEnable dom)
