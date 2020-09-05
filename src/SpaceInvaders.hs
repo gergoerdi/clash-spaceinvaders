@@ -106,29 +106,33 @@ videoBoard vidRead = (vidAddr, irq, delayVGA vgaSync rgb)
         startLine <- isRising False (isJust <$> vgaX)
         endFrame <- isFalling True (isJust <$> vgaY)
         y <- vgaY'
+        newLine <- changed Nothing vgaY'
         pure $ do
             guard startLine
-            msum [ do (newLine, 96) <- y; guard newLine; return 1
+            msum [ do guard newLine; 96 <- y; return 1
                  , do guard endFrame; return 2
                  ]
 
     vidAddr = do
         x <- vgaX'
+        newPixel <- changed Nothing vgaX'
         y <- vgaY'
         pure $ do
-            (newPixel, x) <- x
-            (_, y) <- y
+            x <- x
+            y <- y
             guard newPixel
             let (addr, idx) = bitCoerce (y, x) :: (Index VidSize, Unsigned 3)
             guard $ idx == 0
             return addr
 
-    pixel = shiftOut (maybe False fst <$> vgaX') $ do
+    pixel = shiftOut newPixel $ do
         refresh <- delay False $ isJust <$> vidAddr
         newValue <- vidRead
         pure $ do
             guard refresh
             return newValue
+      where
+        newPixel = (isJust <$> vgaX') .&&. changed Nothing vgaX'
 
     rgb :: DSignal _ 1 _
     rgb = mux (unsafeFromSignal $ bitToBool <$> pixel) fg bg
@@ -270,15 +274,15 @@ type VidX = 256
 type VidY = 224
 type VidSize = VidX * VidY `Div` 8
 
-virtualX :: Index 640 -> Maybe (Bool, Index VidX)
+virtualX :: Index 640 -> Maybe (Index VidX)
 virtualX x = do
     (x', subpixel) <- bitCoerce @_ @(Unsigned 9, Unsigned 1) <$> between (64, 576) x
-    return (subpixel == 0, {- maxBound - -} fromIntegral x')
+    return $ fromIntegral x'
 
-virtualY :: Index 480 -> Maybe (Bool, Index VidY)
+virtualY :: Index 480 -> Maybe (Index VidY)
 virtualY y = do
     (y', subpixel) <- bitCoerce @_ @(Unsigned 8, Unsigned 1) <$> between (16, 464) y
-    return (subpixel == 0, {- maxBound - -} fromIntegral y')
+    return $ fromIntegral y'
 
 mapWriteAddr :: (a -> a') -> Maybe (a, d) -> Maybe (a', d)
 mapWriteAddr f = fmap $ first f
