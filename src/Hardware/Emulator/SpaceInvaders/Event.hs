@@ -29,8 +29,7 @@ data ButtonEvent
     | DIP7
 
 data UserEvent
-    = Quit
-    | Button Bool ButtonEvent
+    = Button Bool ButtonEvent
 
 encodeKey KeycodeC = Just Credit
 encodeKey KeycodeLeft = Just $ P1 MoveLeft
@@ -48,7 +47,5 @@ userEvent :: EventPayload -> Maybe UserEvent
 userEvent ev = case ev of
     KeyboardEvent KeyboardEventData{keyboardEventKeysym = Keysym{..}, ..} ->
         case (keyboardEventKeyMotion, keysymKeycode) of
-            (Released, KeycodeEscape) -> Just Quit
             (motion, key) -> Button (motion == Pressed) <$> encodeKey key
-    WindowClosedEvent{} -> Just Quit
     _ -> Nothing

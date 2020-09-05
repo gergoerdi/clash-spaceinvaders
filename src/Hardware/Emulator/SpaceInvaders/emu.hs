@@ -78,32 +78,20 @@ main = do
     let s = mkS
 
     let execCPU act = runMaybeT act
-
-    let runSome target = do
-            let stepsPerTick = 50000
-            i <- ($ 0) $ fix $ \loop i -> do
-                execCPU $ replicateM_ stepsPerTick step
-                now <- ticks
-                (if now < target then loop else return) $ let i' = i + 1 in i' `seq` i'
-            liftIO $ printf "1 half-frame at %d KHz\n" (fromIntegral (i * stepsPerTick) * screenRefreshRate videoParams * 2 `div` 1000)
-            return ()
+    let runSome = replicateM_ 1000 $ execCPU step
 
     void $ execRWST `flip` r `flip` s $
       withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
-        before <- ticks
-        -- keyEvents <- fmap catMaybes $ forM events $ \event -> forM (userEvent $ eventPayload event) $ \ue -> case ue of
-        --     Quit -> exit
-        --     Button state btn -> lift $ sinkEvent inputPorts state btn
+        forM_ events $ \event -> forM_ (userEvent $ eventPayload event) $ \ue -> case ue of
+            Button state btn -> liftIO $ sinkEvent inputPorts state btn
 
-        let target1 = before + (frameTime `div` 2)
-            target2 = target1 + (frameTime `div` 2)
-
-        lift $ runSome target1
-        lift $ execCPU (interrupt $ RST 0x01)
-        lift $ runSome target2
-        lift $ execCPU (interrupt $ RST 0x02)
+        lift $ do
+            runSome
+            execCPU (interrupt $ RST 0x01)
+            runSome
+            execCPU (interrupt $ RST 0x02)
 
         liftIO $ forM_ [0..223] $ \y -> do
             let readBase = 0x2400 + y * 32
