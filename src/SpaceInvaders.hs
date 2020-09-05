@@ -18,6 +18,7 @@ import Clash.Annotations.TH
 import RetroClash.Utils
 import RetroClash.Clock
 import RetroClash.VGA
+import RetroClash.Video
 import RetroClash.Delayed
 import RetroClash.PS2
 import RetroClash.CPU
@@ -98,8 +99,8 @@ videoBoard
 videoBoard vidRead = (vidAddr, irq, delayVGA vgaSync rgb)
   where
     VGADriver{..} = vgaDriver vga640x480at60
-    vgaX' = (virtualX =<<) <$> vgaX
-    vgaY' = (virtualY =<<) <$> vgaY
+    vgaX' = scale @256 (SNat @2) . center $ vgaX
+    vgaY' = scale @224 (SNat @2) . center $ vgaY
     vgaDE = (isJust <$> vgaX) .&&. (isJust <$> vgaY)
 
     irq = do
@@ -273,16 +274,6 @@ monochrome b = if bitToBool b then maxBound else minBound
 type VidX = 256
 type VidY = 224
 type VidSize = VidX * VidY `Div` 8
-
-virtualX :: Index 640 -> Maybe (Index VidX)
-virtualX x = do
-    (x', subpixel) <- bitCoerce @_ @(Unsigned 9, Unsigned 1) <$> between (64, 576) x
-    return $ fromIntegral x'
-
-virtualY :: Index 480 -> Maybe (Index VidY)
-virtualY y = do
-    (y', subpixel) <- bitCoerce @_ @(Unsigned 8, Unsigned 1) <$> between (16, 464) y
-    return $ fromIntegral y'
 
 mapWriteAddr :: (a -> a') -> Maybe (a, d) -> Maybe (a', d)
 mapWriteAddr f = fmap $ first f
