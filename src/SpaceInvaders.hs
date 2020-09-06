@@ -188,8 +188,8 @@ mainBoard inputs irq vidAddrVid = (vidRead, cpuOut, bundle (read, portCmd, portR
             return (addr', val)
 
     progROM addr = unpack <$> romFilePow2 @13 "image.hex" addr
-    mainRAM addr = blockRam1 ClearOnReset (SNat @0x0400) 0 (addr :: _ (Unsigned 10)) ramWrite
-    vidRAM addr = blockRam1 ClearOnReset (SNat @7168) 0 addr vidWrite
+    mainRAM addr = blockRamU ClearOnReset (SNat @0x0400) (const 0) (addr :: _ (Unsigned 10)) ramWrite
+    vidRAM addr = blockRamU ClearOnReset (SNat @7168) (const 0) addr vidWrite
 
     vidRead = vidRAM vidAddr
 
