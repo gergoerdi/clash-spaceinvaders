@@ -22,7 +22,8 @@ clashProject = ClashProject
     , topName = "Top"
     , clashFlags =
         [ "-Wno-partial-type-signatures"
-        , "-fclash-inline-limit=60"
+        , "-fclash-inline-limit=150"
+        , "-fclash-spec-limit=100"
         , "-fclash-intwidth=32"
         ]
     , buildDir = "_build"
