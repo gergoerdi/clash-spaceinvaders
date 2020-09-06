@@ -52,7 +52,7 @@ video u_video (
 assign HDMI_TX_CLK = clk_25;
 //assign PS2_EN = 1'b0;	
 
-SpaceInvaders u_spaceinvaders
+topEntity u_topEntity
       (.CLK_25MHZ(clk_25),
        .RESET(!gen_clk_locked),
        .VGA_VSYNC(HDMI_TX_VS),

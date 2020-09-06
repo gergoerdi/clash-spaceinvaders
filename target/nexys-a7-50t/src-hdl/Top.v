@@ -25,10 +25,9 @@ module Top(
       .LOCKED(CLK_LOCKED)
       );
 
-   SpaceInvaders u_SpaceInvaders
+   topEntity u_topEntity
      (.CLK_25MHZ(CLK_25MHZ),
       .RESET(!CLK_LOCKED),
-      .ENABLED(1'b1),
       .PS2_CLK(PS2_CLK),
       .PS2_DATA(PS2_DATA),
       .VGA_VSYNC(VGA_VS),
