@@ -170,7 +170,14 @@ mainBoard inputs irq vidAddrVid = (vidRead, cpuOut, bundle (read, portCmd, portR
     -- (cpuState, cpuOut) = unbundle $ mealyState (runCPUDebug defaultOut cpu) initState cpuIn
     cpuOut@CPUOut{..} = mealyCPU initState defaultOut (void . runMaybeT . cpu) CPUIn{..}
 
-    memWrite = packWrite <$> _addrOut <*> _dataOut
+    memAddr = either (const 0x0000) id <$> _addrOut
+
+    memWrite = do
+        addr <- _addrOut
+        dat <- _dataOut
+        pure $ case (addr, dat) of
+            (Right addr, Just dat) -> Just (addr, dat)
+            _ -> Nothing
 
     vidWrite :: _ (Maybe (Index VidSize, Value))
     vidWrite = do
@@ -199,7 +206,7 @@ mainBoard inputs irq vidAddrVid = (vidRead, cpuOut, bundle (read, portCmd, portR
         pure $ guard (not preempted) *> return read
 
     vidAddrCPU = do
-        addr <- _addrOut
+        addr <- memAddr
         pure $ do
             guard $ 0x2400 <= addr && addr < 0x4000
             pure $ fromIntegral $ addr - 0x2400
@@ -207,9 +214,9 @@ mainBoard inputs irq vidAddrVid = (vidRead, cpuOut, bundle (read, portCmd, portR
     vidAddr = fromMaybe 0 <$> (mplus <$> vidAddrVid <*> vidAddrCPU)
 
     memRead = do
-        (addr :: Addr) <- delay 0 _addrOut
-        rom <- progROM $ truncateB <$> _addrOut
-        ram <- mainRAM $ truncateB <$> (_addrOut - 0x2000)
+        (addr :: Addr) <- delay 0 memAddr
+        rom <- progROM $ truncateB <$> memAddr
+        ram <- mainRAM $ truncateB <$> (memAddr - 0x2000)
         vid <- vidReadCPU
 
         preempted <- delay False $ isJust <$> vidAddrVid
@@ -222,10 +229,7 @@ mainBoard inputs irq vidAddrVid = (vidRead, cpuOut, bundle (read, portCmd, portR
     (interruptRequest, irqInstr) = interruptor irq (delay False _interruptAck)
 
     -- TODO: rewrite for clarity
-    port = do
-        selected <- _portSelect
-        addr <- _addrOut
-        pure $ guard selected >> Just (truncateB addr)
+    port = either Just (const Nothing) <$> _addrOut
 
     -- TODO: rewrite for clarity
     portCmd = delay Nothing $ do

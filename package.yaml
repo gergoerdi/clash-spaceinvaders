@@ -55,6 +55,7 @@ default-extensions:
   - TypeOperators
 
 ghc-options:
+  -fexpose-all-unfoldings -fno-worker-wrapper
   -fplugin GHC.TypeLits.KnownNat.Solver
   -fplugin GHC.TypeLits.Normalise
   -fplugin GHC.TypeLits.Extra.Solver
