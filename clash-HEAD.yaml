@@ -3,7 +3,7 @@ resolver: lts-16.9
 
 packages:
   - github: clash-lang/clash-compiler
-    commit: 5b65cf4d515dcc6cf5e9b3c5d6784415a5275ad7
+    commit: b0a239e1a6b0e0d0f7cf63a0c85f2c1448a0a13e
     subdirs:
       - clash-ghc
       - clash-prelude

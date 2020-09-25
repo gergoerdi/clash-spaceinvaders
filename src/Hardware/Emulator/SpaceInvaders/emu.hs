@@ -38,11 +38,6 @@ import Debug.Trace
 
 -- import Paths_space_invaders_arcade
 
-instance (KnownNat n) => Ix (Unsigned n) where
-    range (a, b) = [a..b]
-    index (a, b) x = index (fromIntegral a, fromIntegral b) (fromIntegral x)
-    inRange (a, b) x = inRange (fromIntegral a, fromIntegral b) (fromIntegral x)
-
 main :: IO ()
 main = do
     hSetBuffering stdout NoBuffering
