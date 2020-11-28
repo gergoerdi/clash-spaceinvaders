@@ -1,0 +1,17 @@
+name: clash-HEAD
+resolver: lts-16.21
+
+packages:
+  - github: clash-lang/clash-compiler
+    commit: fcd3c63bff3fd475b99616b5b39cffbfd0b795fd
+    subdirs:
+      - clash-ghc
+      - clash-prelude
+      - clash-lib
+
+  - concurrent-supply-0.1.8
+  - ghc-typelits-extra-0.4.1
+
+flags:
+    clash-prelude:
+      multiple-hidden: false

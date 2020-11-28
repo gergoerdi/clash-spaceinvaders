@@ -1,0 +1,1 @@
+stack runhaskell -- Shakefile.hs $@
