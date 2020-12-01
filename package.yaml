@@ -30,6 +30,7 @@ dependencies:
   - mtl
   - transformers
   - array
+  - lens
 
 # Anything that Clash uses by default should go here
 default-extensions:
@@ -69,8 +70,8 @@ source-dirs:
   - src
 
 executables:
-  spaceinvaders-model:
-    main: model.hs
+  spaceinvaders-sim:
+    main: sim.hs
     dependencies:
       - retroclash-sim
       - sdl2
