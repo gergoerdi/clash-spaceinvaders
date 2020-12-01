@@ -39,7 +39,7 @@ mainBoard vidRead lineEnd = (vidAddr, vidWrite)
   where
     CPUOut{..} = intel8080 CPUIn{..}
 
-    (interruptRequest, rst) = interruptor irq _interruptAck
+    (interruptRequest, rst) = interruptor irq (delay False _interruptAck)
     irq = muxA
         [ enable (lineEnd .== Just 95) (pure 1)
         , enable (lineEnd .== Just maxBound) (pure 2)
