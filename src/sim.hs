@@ -14,10 +14,11 @@ import Data.Word
 world
     :: IOArray Word16 (Unsigned 8)
     -> BufferArray VidX VidY
+    -> Maybe (Index VidY)
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
     -> IO (Maybe (Unsigned 8), Maybe (Index VidY))
-world vid vbuf vidAddr vidWrite = do
+world vid vbuf line vidAddr vidWrite = do
     vidRead <- traverse (readArray vid . fromIntegral) vidAddr
     case (vidAddr, vidWrite) of
         (Just addr, Just wr) -> do
@@ -30,7 +31,7 @@ world vid vbuf vidAddr vidWrite = do
                     color = if pixel then fg else bg
                 writeArray (getArray vbuf) (x0 * 8 + i, y) color
         _ -> return ()
-    return (vidRead, Nothing) -- TODO: line
+    return (vidRead, line)
 
 main :: IO ()
 main = do
@@ -41,7 +42,11 @@ main = do
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
-        liftIO $ replicateM_ 2000 $ sim $ uncurry $ world vid vbuf
+        liftIO $ do
+            replicateM_ 5000 $ sim $ uncurry $ world vid vbuf Nothing
+            sim $ uncurry $ world vid vbuf $ Just 95
+            replicateM_ 5000 $ sim $ uncurry $ world vid vbuf Nothing
+            sim $ uncurry $ world vid vbuf $ Just maxBound
         return $ rasterizeBuffer vbuf
 
 videoParams :: VideoParams
