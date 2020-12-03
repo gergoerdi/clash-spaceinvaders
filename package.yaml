@@ -31,6 +31,9 @@ dependencies:
   - transformers
   - array
   - lens
+  - barbies
+  - barbies-th
+  - tuple
 
 # Anything that Clash uses by default should go here
 default-extensions:

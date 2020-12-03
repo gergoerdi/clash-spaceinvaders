@@ -25,17 +25,24 @@ topEntity = withEnableGen board
   where
     board ps2 = vga
       where
+        dips = pure 0b00000
+        tilt = pure 0
+        coin = pure 0
+
         (vga, vidRead, lineEnd) = video (fromMaybe 0 <$> vidAddr) vidWrite
-        (vidAddr, vidWrite) = mainBoard vidRead lineEnd
+        (vidAddr, vidWrite) = mainBoard dips tilt coin vidRead lineEnd
 
 mainBoard
     :: (HiddenClockResetEnable dom)
-    => Signal dom (Maybe (Unsigned 8))
+    => Signal dom (BitVector 5)
+    -> Signal dom Bit
+    -> Signal dom Bit
+    -> Signal dom (Maybe (Unsigned 8))
     -> Signal dom (Maybe (Index VidY))
     -> ( Signal dom (Maybe VidAddr)
       , Signal dom (Maybe (Unsigned 8))
       )
-mainBoard vidRead lineEnd = (vidAddr, vidWrite)
+mainBoard dips tilt coin vidRead lineEnd = (vidAddr, vidWrite)
   where
     CPUOut{..} = intel8080 CPUIn{..}
 
@@ -45,13 +52,14 @@ mainBoard vidRead lineEnd = (vidAddr, vidWrite)
         , enable (lineEnd .== Just maxBound) (pure 2)
         ]
 
-    inputs = pure (0x00, 0x00, 0x00)
+    p1 = MkPlayer 0 0 0 0
+    p2 = MkPlayer 0 0 0 0
 
     (dataIn, (vidAddr, vidWrite)) = memoryMap _addrOut _dataOut $ override rst $ do
         rom <- romFromFile (SNat @0x2000) "_build/SpaceInvaders.bin"
         ram <- ram0 (SNat @0x0400)
         (vid, vidAddr, vidWrite) <- conduit vidRead
-        io <- port_ $ peripherals inputs
+        io <- port_ $ peripherals dips tilt coin p1 p2
 
         matchLeft $ do
             from 0x00 $ connect io
