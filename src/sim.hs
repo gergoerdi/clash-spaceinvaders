@@ -16,12 +16,10 @@ import Data.Tuple.Curry
 world
     :: IOArray Word16 (Unsigned 8)
     -> BufferArray VidX VidY
-    -> (Scancode -> Bool)
-    -> Maybe (Index VidY)
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
-    -> IO (BitVector 8, Bit, Bit, Pure Player, Pure Player, Maybe (Unsigned 8), Maybe (Index VidY))
-world vid vbuf keyDown line vidAddr vidWrite = do
+    -> IO (Maybe (Unsigned 8))
+world vid vbuf vidAddr vidWrite = do
     vidRead <- traverse (readArray vid . fromIntegral) vidAddr
     case (vidAddr, vidWrite) of
         (Just addr, Just wr) -> do
@@ -34,23 +32,7 @@ world vid vbuf keyDown line vidAddr vidWrite = do
                     color = if pixel then fg else bg
                 writeArray (getArray vbuf) (x0 * 8 + i, y) color
         _ -> return ()
-
-    let dips = 0x00
-        tilt = boolToBit False
-        coin = boolToBit $ keyDown ScancodeC
-        p1 = MkPlayer
-            { pLeft = boolToBit $ keyDown ScancodeLeft
-            , pRight = boolToBit $ keyDown ScancodeRight
-            , pShoot = boolToBit $ keyDown ScancodeLCtrl
-            , pStart = boolToBit $ keyDown ScancodeReturn
-            }
-        p2 = MkPlayer
-            { pLeft = 0
-            , pRight = 0
-            , pShoot = 0
-            , pStart = 0
-            }
-    return (dips, tilt, coin, p1, p2, vidRead, line)
+    return vidRead
 
 main :: IO ()
 main = do
@@ -63,11 +45,29 @@ main = do
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
+        let dips = 0x00
+            tilt = boolToBit False
+            coin = boolToBit $ keyDown ScancodeC
+            p1 = MkPlayer
+                { pLeft = boolToBit $ keyDown ScancodeLeft
+                , pRight = boolToBit $ keyDown ScancodeRight
+                , pShoot = boolToBit $ keyDown ScancodeLCtrl
+                , pStart = boolToBit $ keyDown ScancodeReturn
+                }
+            p2 = MkPlayer
+               { pLeft = 0
+               , pRight = 0
+               , pShoot = 0
+               , pStart = 0
+               }
+
         liftIO $ do
-            let run line = sim $ uncurryN $ world vid vbuf keyDown line
-            replicateM_ 5000 $ run Nothing
+            let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do
+                    vidRead <- world vid vbuf vidAddr vidWrite
+                    return (dips, tilt, coin, p1, p2, vidRead, line)
+            replicateM_ 4000 $ run Nothing
             run $ Just 95
-            replicateM_ 5000 $ run Nothing
+            replicateM_ 4000 $ run Nothing
             run $ Just maxBound
         return $ rasterizeBuffer vbuf
 
