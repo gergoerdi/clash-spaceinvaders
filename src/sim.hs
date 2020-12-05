@@ -3,6 +3,7 @@ import Clash.Prelude
 
 import RetroClash.Sim.IO
 import RetroClash.Sim.SDL
+import RetroClash.Barbies
 import Hardware.SpaceInvaders
 import Hardware.SpaceInvaders.Video
 
@@ -19,7 +20,7 @@ world
     -> Maybe (Index VidY)
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
-    -> IO (BitVector 5, Bit, Bit, Maybe (Unsigned 8), Maybe (Index VidY))
+    -> IO (BitVector 8, Bit, Bit, Pure Player, Pure Player, Maybe (Unsigned 8), Maybe (Index VidY))
 world vid vbuf keyDown line vidAddr vidWrite = do
     vidRead <- traverse (readArray vid . fromIntegral) vidAddr
     case (vidAddr, vidWrite) of
@@ -34,16 +35,30 @@ world vid vbuf keyDown line vidAddr vidWrite = do
                 writeArray (getArray vbuf) (x0 * 8 + i, y) color
         _ -> return ()
 
-    let dips = 0b00000
+    let dips = 0x00
         tilt = boolToBit False
         coin = boolToBit $ keyDown ScancodeC
-    return (dips, tilt, coin, vidRead, line)
+        p1 = MkPlayer
+            { pLeft = boolToBit $ keyDown ScancodeLeft
+            , pRight = boolToBit $ keyDown ScancodeRight
+            , pShoot = boolToBit $ keyDown ScancodeLCtrl
+            , pStart = boolToBit $ keyDown ScancodeReturn
+            }
+        p2 = MkPlayer
+            { pLeft = 0
+            , pRight = 0
+            , pShoot = 0
+            , pStart = 0
+            }
+    return (dips, tilt, coin, p1, p2, vidRead, line)
 
 main :: IO ()
 main = do
     vid <- newArray (0, 0x1bff) 0
     vbuf <- newBufferArray
-    sim <- simulateIO_ @System (bundle . uncurryN mainBoard . unbundle) (0, 0, 0, Nothing, Nothing)
+    sim <- simulateIO_ @System
+        (bundle . uncurryN mainBoard . unbundle)
+        (0, 0, 0, MkPlayer 0 0 0 0, MkPlayer 0 0 0 0, Nothing, Nothing)
 
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape

@@ -1,5 +1,9 @@
 {-# LANGUAGE NumericUnderscores, RecordWildCards #-}
-module Hardware.SpaceInvaders where
+module Hardware.SpaceInvaders
+    ( Player(..)
+    , mainBoard
+    , topEntity
+    ) where
 
 import Clash.Prelude
 import Clash.Annotations.TH
@@ -14,6 +18,7 @@ import RetroClash.Clock
 import RetroClash.VGA
 import RetroClash.PS2
 import RetroClash.Memory
+import RetroClash.Barbies
 import Data.Maybe
 
 topEntity
@@ -28,21 +33,25 @@ topEntity = withEnableGen board
         dips = pure 0b00000
         tilt = pure 0
         coin = pure 0
+        p1 = pure $ MkPlayer 0 0 0 0
+        p2 = p1
 
         (vga, vidRead, lineEnd) = video (fromMaybe 0 <$> vidAddr) vidWrite
-        (vidAddr, vidWrite) = mainBoard dips tilt coin vidRead lineEnd
+        (vidAddr, vidWrite) = mainBoard dips tilt coin p1 p2 vidRead lineEnd
 
 mainBoard
     :: (HiddenClockResetEnable dom)
-    => Signal dom (BitVector 5)
+    => Signal dom (BitVector 8)
     -> Signal dom Bit
     -> Signal dom Bit
+    -> Signal dom (Pure Player)
+    -> Signal dom (Pure Player)
     -> Signal dom (Maybe (Unsigned 8))
     -> Signal dom (Maybe (Index VidY))
     -> ( Signal dom (Maybe VidAddr)
       , Signal dom (Maybe (Unsigned 8))
       )
-mainBoard dips tilt coin vidRead lineEnd = (vidAddr, vidWrite)
+mainBoard dips tilt coin p1 p2 vidRead lineEnd = (vidAddr, vidWrite)
   where
     CPUOut{..} = intel8080 CPUIn{..}
 
@@ -52,14 +61,11 @@ mainBoard dips tilt coin vidRead lineEnd = (vidAddr, vidWrite)
         , enable (lineEnd .== Just maxBound) (pure 2)
         ]
 
-    p1 = MkPlayer 0 0 0 0
-    p2 = MkPlayer 0 0 0 0
-
     (dataIn, (vidAddr, vidWrite)) = memoryMap _addrOut _dataOut $ override rst $ do
         rom <- romFromFile (SNat @0x2000) "_build/SpaceInvaders.bin"
         ram <- ram0 (SNat @0x0400)
         (vid, vidAddr, vidWrite) <- conduit vidRead
-        io <- port_ $ peripherals dips tilt coin p1 p2
+        io <- port_ $ peripherals dips tilt coin (bunbundle p1) (bunbundle p2)
 
         matchLeft $ do
             from 0x00 $ connect io

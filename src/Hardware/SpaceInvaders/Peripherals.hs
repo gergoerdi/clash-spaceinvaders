@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, StandaloneDeriving, DerivingVia, UndecidableInstances #-}
 module Hardware.SpaceInvaders.Peripherals where
 
 import Clash.Prelude
@@ -17,11 +17,12 @@ import Barbies.TH
 declareBareB [d|
   data Player = MkPlayer
     { pLeft, pRight, pShoot, pStart :: Bit
-    } |]
+    }
+    deriving (Generic, NFDataX) |]
 
 peripherals
     :: forall dom. HiddenClockResetEnable dom
-    => Signal dom (BitVector 5)
+    => Signal dom (BitVector 8)
     -> Signal dom Bit
     -> Signal dom Bit
     -> Signals dom Player
@@ -30,17 +31,15 @@ peripherals
     -> Signal dom (Maybe (Unsigned 8))
 peripherals dips tilt coin p1 p2 cmd = mealyStateB (uncurry step) (0, 0) (inputs, cmd)
   where
-    inputs :: Signal dom (Unsigned 8, Unsigned 8, Unsigned 8)
-    inputs = fmap bitCoerce (bundle (bundle inp0, bundle inp1, bundle inp2) :: Signal dom (Vec 8 Bit, Vec 8 Bit, Vec 8 Bit))
-    -- inputs = (bitCoerce <$> bundle inp0, bitCoerce <$> bundle inp1, bitCoerce <$> bundle inp2)
+    inputs = route <$> dips <*> tilt <*> coin <*> bbundle p1 <*> bbundle p2
 
-    dip7 :> dip6 :> dip5 :> dip4 :> dip3 :> Nil = unbundle . fmap bitCoerce $ dips
+    route dips tilt coin p1 p2 = bitCoerce (inp0, inp1, inp2)
+      where
+        joy p = pRight p :> pLeft p :> pShoot p :> Nil
 
-    joy p = pRight p :> pLeft p :> pShoot p :> Nil
-
-    inp0 = 0    :> joy p1 ++ 1    :> 1         :> 1         :> dip4 :> Nil
-    inp1 = 0    :> joy p1 ++ 1    :> pStart p1 :> pStart p2 :> coin :> Nil
-    inp2 = dip7 :> joy p2 ++ dip6 :> tilt      :> dip5      :> dip3 :> Nil
+        inp0 = 0      :> joy p1 ++ 1      :> 1         :> 1         :> dips!4 :> Nil
+        inp1 = 0      :> joy p1 ++ 1      :> pStart p1 :> pStart p2 :> coin   :> Nil
+        inp2 = dips!7 :> joy p2 ++ dips!6 :> tilt      :> dips!5    :> dips!3 :> Nil
 
     step (inp0, inp1, inp2) cmd = fmap (Just . fromMaybe 0x00) $ for cmd $ \case
         ReadPort 0 -> do
