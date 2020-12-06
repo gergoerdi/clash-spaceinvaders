@@ -16,30 +16,33 @@ import Barbies.TH
 
 declareBareB [d|
   data Player = MkPlayer
-    { pLeft, pRight, pShoot, pStart :: Bit
+    { pLeft, pRight, pShoot, pStart :: Bool
     }
     deriving (Generic, NFDataX) |]
 
 peripherals
     :: forall dom. HiddenClockResetEnable dom
     => Signal dom (BitVector 8)
-    -> Signal dom Bit
-    -> Signal dom Bit
-    -> Signals dom Player
-    -> Signals dom Player
+    -> Signal dom Bool
+    -> Signal dom Bool
+    -> Signal dom (Pure Player)
+    -> Signal dom (Pure Player)
     -> Signal dom (Maybe (PortCommand (Index 7) (Unsigned 8)))
     -> Signal dom (Maybe (Unsigned 8))
 peripherals dips tilt coin p1 p2 cmd = mealyStateB (uncurry step) (0, 0) (inputs, cmd)
   where
-    inputs = route <$> dips <*> tilt <*> coin <*> bbundle p1 <*> bbundle p2
+    inputs = route <$> dips <*> (boolToBit <$> tilt) <*> (boolToBit <$> coin) <*> p1 <*> p2
 
+    route :: BitVector 8 -> Bit -> Bit -> Pure Player -> Pure Player -> (Unsigned 8, Unsigned 8, Unsigned 8)
     route dips tilt coin p1 p2 = bitCoerce (inp0, inp1, inp2)
       where
-        joy p = pRight p :> pLeft p :> pShoot p :> Nil
+        joy p = bitCoerce $ pRight p :> pLeft p :> pShoot p :> Nil
+        start1 = boolToBit $ pStart p1
+        start2 = boolToBit $ pStart p2
 
-        inp0 = 0      :> joy p1 ++ 1      :> 1         :> 1         :> dips!4 :> Nil
-        inp1 = 0      :> joy p1 ++ 1      :> pStart p1 :> pStart p2 :> coin   :> Nil
-        inp2 = dips!7 :> joy p2 ++ dips!6 :> tilt      :> dips!5    :> dips!3 :> Nil
+        inp0 = 0      :> joy p1 ++ 1      :> 1      :> 1      :> dips!4 :> Nil
+        inp1 = 0      :> joy p1 ++ 1      :> start1 :> start2 :> coin   :> Nil
+        inp2 = dips!7 :> joy p2 ++ dips!6 :> tilt   :> dips!5 :> dips!3 :> Nil
 
     step (inp0, inp1, inp2) cmd = fmap (Just . fromMaybe 0x00) $ for cmd $ \case
         ReadPort 0 -> do

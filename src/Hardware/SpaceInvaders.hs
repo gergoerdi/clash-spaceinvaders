@@ -30,10 +30,11 @@ topEntity = withEnableGen board
   where
     board ps2 = vga
       where
-        dips = pure 0b00000
-        tilt = pure 0
-        coin = pure 0
-        p1 = pure $ MkPlayer 0 0 0 0
+        dips = pure 0x00
+        tilt = pure False
+        coin = pure False
+
+        p1 = pure $ MkPlayer False False False False
         p2 = p1
 
         (vga, vidRead, lineEnd) = video (fromMaybe 0 <$> vidAddr) vidWrite
@@ -42,8 +43,8 @@ topEntity = withEnableGen board
 mainBoard
     :: (HiddenClockResetEnable dom)
     => Signal dom (BitVector 8)
-    -> Signal dom Bit
-    -> Signal dom Bit
+    -> Signal dom Bool
+    -> Signal dom Bool
     -> Signal dom (Pure Player)
     -> Signal dom (Pure Player)
     -> Signal dom (Maybe (Unsigned 8))
@@ -65,7 +66,7 @@ mainBoard dips tilt coin p1 p2 vidRead lineEnd = (vidAddr, vidWrite)
         rom <- romFromFile (SNat @0x2000) "_build/SpaceInvaders.bin"
         ram <- ram0 (SNat @0x0400)
         (vid, vidAddr, vidWrite) <- conduit vidRead
-        io <- port_ $ peripherals dips tilt coin (bunbundle p1) (bunbundle p2)
+        io <- port_ $ peripherals dips tilt coin p1 p2
 
         matchLeft $ do
             from 0x00 $ connect io

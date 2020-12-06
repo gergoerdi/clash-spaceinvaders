@@ -38,27 +38,29 @@ main :: IO ()
 main = do
     vid <- newArray (0, 0x1bff) 0
     vbuf <- newBufferArray
+
+    let p0 = MkPlayer False False False False
     sim <- simulateIO_ @System
         (bundle . uncurryN mainBoard . unbundle)
-        (0, 0, 0, MkPlayer 0 0 0 0, MkPlayer 0 0 0 0, Nothing, Nothing)
+        (0x00, False, False, p0, p0, Nothing, Nothing)
 
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
         let dips = 0x00
-            tilt = boolToBit False
-            coin = boolToBit $ keyDown ScancodeC
+            tilt = False
+            coin = keyDown ScancodeC
             p1 = MkPlayer
-                { pLeft = boolToBit $ keyDown ScancodeLeft
-                , pRight = boolToBit $ keyDown ScancodeRight
-                , pShoot = boolToBit $ keyDown ScancodeLCtrl
-                , pStart = boolToBit $ keyDown ScancodeReturn
+                { pLeft = keyDown ScancodeLeft
+                , pRight = keyDown ScancodeRight
+                , pShoot = keyDown ScancodeLCtrl
+                , pStart = keyDown ScancodeReturn
                 }
             p2 = MkPlayer
-               { pLeft = 0
-               , pRight = 0
-               , pShoot = 0
-               , pStart = 0
+               { pLeft = False
+               , pRight = False
+               , pShoot = False
+               , pStart = False
                }
 
         liftIO $ do
