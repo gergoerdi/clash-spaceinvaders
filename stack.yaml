@@ -22,3 +22,6 @@ packages:
   - clash-shake
   - clash-intel8080
   - .
+
+ghc-options:
+  dependent-map: -fexpose-all-unfoldings -fno-worker-wrapper
