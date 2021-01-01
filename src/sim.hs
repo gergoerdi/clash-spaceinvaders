@@ -47,7 +47,7 @@ main = do
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
-        let dips = 0x00
+        let dips = 0b0000_0000
             tilt = False
             coin = keyDown ScancodeC
             p1 = MkPlayer
@@ -56,12 +56,9 @@ main = do
                 , pShoot = keyDown ScancodeLCtrl
                 , pStart = keyDown ScancodeReturn
                 }
-            p2 = MkPlayer
-               { pLeft = False
-               , pRight = False
-               , pShoot = False
-               , pStart = False
-               }
+            p2 = p1
+                { pStart = False -- TODO
+                }
 
         liftIO $ do
             let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do

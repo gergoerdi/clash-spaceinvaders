@@ -36,21 +36,18 @@ topEntity = withEnableGen board
         tilt = pure False
         coin = keyState 0x021 sc -- 'C'
 
-        p1 = bbundle $ MkPlayer
+        p1 = MkPlayer
             { pLeft  = keyState 0x16b sc -- Left arrow
             , pRight = keyState 0x114 sc -- Right arrow
             , pShoot = keyState 0x014 sc -- Left Ctrl
             , pStart = keyState 0x05a sc -- Enter
             }
-        p2 = bbundle $ MkPlayer
-            { pLeft = pure False
-            , pRight = pure False
-            , pShoot = pure False
-            , pStart = pure False
+        p2 = p1
+            { pStart = pure False
             }
 
         (vga, vidRead, lineEnd) = video (fromMaybe 0 <$> vidAddr) vidWrite
-        (vidAddr, vidWrite) = mainBoard dips tilt coin p1 p2 vidRead lineEnd
+        (vidAddr, vidWrite) = mainBoard dips tilt coin (bbundle p1) (bbundle p2) vidRead lineEnd
 
 mainBoard
     :: (HiddenClockResetEnable dom)
