@@ -15,6 +15,12 @@ extra-source-files:
 data-files:
   - image/*
 
+custom-setup:
+  dependencies:
+    - base
+    - Cabal
+    - clashilator
+
 dependencies:
   - base >= 4.7 && < 5
   - clash-prelude
@@ -72,9 +78,29 @@ ghc-options:
 source-dirs:
   - src
 
+flags:
+  verilator:
+    manual: True
+    default: False
+
 executables:
   spaceinvaders-sim:
     main: sim.hs
     dependencies:
       - retroclash-sim
       - sdl2
+
+  spaceinvaders-verilator:
+    main: sim-verilator.hs
+    dependencies:
+      - retroclash-sim
+      - sdl2
+      - extra
+    when:
+    - condition: flag(verilator)
+      then:
+        verbatim:
+          x-clashilator-top-is: Hardware.SpaceInvaders
+          x-clashilator-clock: CLK_25MHZ
+      else:
+        buildable: false

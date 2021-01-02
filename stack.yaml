@@ -21,6 +21,7 @@ packages:
   - retroclash-sim
   - clash-shake
   - clash-intel8080
+  - clashilator
   - .
 
 ghc-options:
