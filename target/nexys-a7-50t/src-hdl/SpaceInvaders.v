@@ -1,7 +1,16 @@
 module SpaceInvaders (
            input        CLK100MHZ,
+
+           input [15:0] SW,
+           input        BTNC,
+           input        BTNU,
+           input        BTND,
+           input        BTNL,
+           input        BTNR,
+
            input        PS2_CLK,
            input        PS2_DATA,
+
            output       VGA_HS,
            output       VGA_VS,
            output [3:0] VGA_R,
@@ -29,8 +38,18 @@ module SpaceInvaders (
    topEntity u_topEntity
      (.CLK_25MHZ(CLK_25MHZ),
       .RESET(!CLK_LOCKED),
+
+      .SWITCHES(SW[7:0]),
+
+      .BTN_CENTER(BTNC),
+      .BTN_UP(BTNU),
+      .BTN_DOWN(BTND),
+      .BTN_LEFT(BTNL),
+      .BTN_RIGHT(BTNR),
+
       .PS2_CLK(PS2_CLK),
       .PS2_DATA(PS2_DATA),
+
       .VGA_HSYNC(VGA_HS),
       .VGA_VSYNC(VGA_VS),
       .VGA_RED(VGA_RED_FULL),

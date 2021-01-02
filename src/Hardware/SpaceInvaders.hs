@@ -24,23 +24,29 @@ import Data.Maybe
 topEntity
     :: "CLK_25MHZ" ::: Clock Dom25
     -> "RESET"     ::: Reset Dom25
+    -> "SWITCHES"  ::: Signal Dom25 (BitVector 8)
+    -> "BTN"       ::: ( "CENTER" ::: Signal Dom25 (Active High)
+                       , "UP"     ::: Signal Dom25 (Active High)
+                       , "DOWN"   ::: Signal Dom25 (Active High)
+                       , "LEFT"   ::: Signal Dom25 (Active High)
+                       , "RIGHT"  ::: Signal Dom25 (Active High)
+                       )
     -> "PS2"       ::: PS2 Dom25
     -> "VGA"       ::: VGAOut Dom25 8 8 8
 topEntity = withEnableGen board
   where
-    board ps2 = vga
+    board dips (c, u, d, l, r) ps2 = vga
       where
         sc = parseScanCode . decodePS2 . samplePS2 $ ps2
 
-        dips = pure 0x00
         tilt = pure False
-        coin = keyState 0x021 sc -- 'C'
+        coin = fromActive <$> c .||. keyState 0x021 sc -- 'C'
 
         p1 = MkPlayer
-            { pLeft  = keyState 0x16b sc -- Left arrow
-            , pRight = keyState 0x114 sc -- Right arrow
-            , pShoot = keyState 0x014 sc -- Left Ctrl
-            , pStart = keyState 0x05a sc -- Enter
+            { pLeft  = fromActive <$> l .||. keyState 0x16b sc -- Left arrow
+            , pRight = fromActive <$> r .||. keyState 0x114 sc -- Right arrow
+            , pShoot = fromActive <$> u .||. keyState 0x014 sc -- Left Ctrl
+            , pStart = fromActive <$> d .||. keyState 0x05a sc -- Enter
             }
         p2 = p1
             { pStart = pure False
