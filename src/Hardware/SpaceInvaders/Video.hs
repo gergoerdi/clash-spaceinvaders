@@ -47,13 +47,13 @@ video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpu
     newCol = fromSignal $ changed Nothing bufI
     block = delayedRegister 0x00 $ \block ->
         mux (delayI False newBlock) load $
-        mux (delayI False newCol) ((`shiftL` 1) <$> block) $
+        mux (delayI False newCol) ((`shiftR` 1) <$> block) $
         block
 
     lineEnd = pure Nothing -- TODO: sync with rgb
     cpuRead = toSignal $ enable (delayI False allowCPU) load
 
-    pixel = enable (delayI False visible) $ msb <$> block
+    pixel = enable (delayI False visible) $ lsb <$> block
     rgb = maybe frame palette <$> pixel
 
     frame = (0x30, 0x30, 0x30)
