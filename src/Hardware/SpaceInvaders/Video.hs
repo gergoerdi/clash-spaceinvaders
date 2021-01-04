@@ -27,12 +27,12 @@ video
        , Signal Dom25 (Maybe (Unsigned 8))
        , Signal Dom25 (Maybe (Index VidY))
        )
-video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpuRead, lineEnd)
+video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpuRead, line)
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
     (bufX, bufI) = scale @(VidX `Div` 8) (SNat @8) . fst . scale (SNat @2) . center $ vgaX
-    (bufY, _) = scale @VidY (SNat @2) . center $ vgaY
+    (bufY, bufScale) = scale @VidY (SNat @2) . center $ vgaY
 
     visible = fromSignal $ isJust <$> bufX .&&. isJust <$> bufY
     (_, base) = addressBy (snatToNum (SNat @(VidX `Div` 8))) bufY
@@ -50,7 +50,10 @@ video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpu
         mux (delayI False newCol) ((`shiftR` 1) <$> block) $
         block
 
-    lineEnd = pure Nothing -- TODO: sync with rgb
+    -- TODO: sync with rgb
+    lineEnd = isFalling False (isJust <$> bufX) .&&. bufScale .== Just maxBound
+    line = mux lineEnd bufY (pure Nothing)
+
     cpuRead = toSignal $ enable (delayI False allowCPU) load
 
     pixel = enable (delayI False visible) $ lsb <$> block
