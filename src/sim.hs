@@ -64,9 +64,9 @@ main = do
             let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do
                     vidRead <- world vid vbuf vidAddr vidWrite
                     return (dips, tilt, coin, p1, p2, vidRead, line)
-            replicateM_ 4000 $ run Nothing
+            replicateM_ 5000 $ run Nothing
             run $ Just 95
-            replicateM_ 4000 $ run Nothing
+            replicateM_ 5000 $ run Nothing
             run $ Just maxBound
         return $ rasterizeBuffer vbuf
 
