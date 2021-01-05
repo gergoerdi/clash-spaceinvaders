@@ -21,7 +21,7 @@ type VidAddr = Index VidSize
 
 video
     :: (HiddenClockResetEnable Dom25)
-    => Signal Dom25 VidAddr
+    => Signal Dom25 (Maybe VidAddr)
     -> Signal Dom25 (Maybe (Unsigned 8))
     -> ( VGAOut Dom25 8 8 8
        , Signal Dom25 (Maybe (Unsigned 8))
@@ -40,8 +40,8 @@ video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpu
 
     vidAddr = base + offset
     allowCPU = not <$> newBlock
-    addr = mux (delayI False allowCPU) (delayI 0 cpuAddr) vidAddr
-    write' = liftA2 (,) <$> enable allowCPU cpuAddr <*> write
+    addr = mux (delayI False allowCPU) (fromMaybe 0 <$> delayI Nothing cpuAddr) vidAddr
+    write' = liftA2 (,) <$> (join <$> enable allowCPU cpuAddr) <*> write
     load = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (delayI Nothing write')
 
     newCol = fromSignal $ changed Nothing bufI

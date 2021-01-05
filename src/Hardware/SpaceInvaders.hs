@@ -52,7 +52,7 @@ topEntity = withEnableGen board
             { pStart = pure False
             }
 
-        (vga, vidRead, lineEnd) = video (fromMaybe 0 <$> vidAddr) vidWrite
+        (vga, vidRead, lineEnd) = video vidAddr vidWrite
         (vidAddr, vidWrite) = mainBoard dips tilt coin (bbundle p1) (bbundle p2) vidRead lineEnd
 
 mainBoard
