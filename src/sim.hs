@@ -21,17 +21,15 @@ world
     -> IO (Maybe (Unsigned 8))
 world vid vbuf vidAddr vidWrite = do
     vidRead <- traverse (readArray vid . fromIntegral) vidAddr
-    case (vidAddr, vidWrite) of
-        (Just addr, Just wr) -> do
-            writeArray vid (fromIntegral addr) wr
-            let (y, x0) = fromIntegral addr `divMod` 32
-            let fg = 0xff_ff_ff
-                bg = 0x00_00_00
-            forM_ [0..7] $ \i -> do
-                let pixel = bitToBool $ wr!i
-                    color = if pixel then fg else bg
-                writeArray (getArray vbuf) (x0 * 8 + i, y) color
-        _ -> return ()
+    forM_ (liftA2 (,) vidAddr vidWrite) $ \(addr, wr) -> do
+        writeArray vid (fromIntegral addr) wr
+        let (y, x0) = fromIntegral addr `divMod` 32
+        let fg = 0xff_ff_ff
+            bg = 0x00_00_00
+        forM_ [0..7] $ \i -> do
+            let pixel = bitToBool $ wr!i
+                color = if pixel then fg else bg
+            writeArray (getArray vbuf) (x0 * 8 + i, y) color
     return vidRead
 
 main :: IO ()
