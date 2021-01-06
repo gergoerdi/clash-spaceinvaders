@@ -27,7 +27,7 @@ video
        , Signal Dom25 (Maybe (Unsigned 8))
        , Signal Dom25 (Maybe (Index VidY))
        )
-video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpuRead, line)
+video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaSync rgb, toSignal cpuRead, line)
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
@@ -39,10 +39,13 @@ video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpu
     (newBlock, offset) = addressBy 1 bufX
 
     vidAddr = base + offset
-    allowCPU = not <$> newBlock
-    addr = mux (delayI False allowCPU) (fromMaybe 0 <$> delayI Nothing cpuAddr) vidAddr
-    write' = liftA2 (,) <$> (join <$> enable allowCPU cpuAddr) <*> write
-    load = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (delayI Nothing write')
+
+    allowCPU = delayI False $ not <$> newBlock
+
+    addr = mux allowCPU (fromMaybe 0 <$> cpuAddr) vidAddr
+    write' = liftA2 (,) <$> cpuAddr <*> write
+    load = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr write'
+    cpuRead = enable (delayI False allowCPU) load
 
     newCol = fromSignal $ changed Nothing bufI
     block = delayedRegister 0x00 $ \block ->
@@ -53,8 +56,6 @@ video (fromSignal -> cpuAddr) (fromSignal -> write) = (delayVGA vgaSync rgb, cpu
     -- TODO: sync with rgb
     lineEnd = isFalling False (isJust <$> bufX) .&&. bufScale .== Just maxBound
     line = mux lineEnd bufY (pure Nothing)
-
-    cpuRead = toSignal $ enable (delayI False allowCPU) load
 
     pixel = enable (delayI False visible) $ lsb <$> block
     rgb = maybe frame palette <$> pixel
