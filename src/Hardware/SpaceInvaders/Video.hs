@@ -27,7 +27,7 @@ video
        , Signal Dom25 (Maybe (Unsigned 8))
        , Signal Dom25 (Maybe (Index VidY))
        )
-video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaSync rgb, toSignal cpuRead, line)
+video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaSync rgb, toSignal cpuRead, matchDelay rgb Nothing line)
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
@@ -53,11 +53,11 @@ video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaS
         mux (delayI False newCol) ((`shiftR` 1) <$> block) $
         block
 
-    -- TODO: sync with rgb
     lineEnd = isFalling False (isJust <$> bufX) .&&. bufScale .== Just maxBound
     line = mux lineEnd bufY (pure Nothing)
 
     pixel = enable (delayI False visible) $ lsb <$> block
+
     rgb = maybe frame palette <$> pixel
 
     frame = (0x30, 0x30, 0x30)
