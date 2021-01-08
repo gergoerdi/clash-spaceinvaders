@@ -38,18 +38,23 @@ video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaS
     (_, base) = addressBy (snatToNum (SNat @(VidX `Div` 8))) bufY
     (newBlock, offset) = addressBy 1 bufX
 
-    vidAddr = base + offset
+    vidAddr = enable (delayI False newBlock) $ base + offset
 
-    allowCPU = delayI False $ not <$> newBlock
+    vidRead :> cpuRead :> Nil =
+        enable (delayI False $ isJust <$> addr1) load :>
+        enable (delayI False $ isJust <$> addr2) load :>
+        Nil
+      where
+        addr1 = vidAddr
+        addr2 = mux (isJust <$> vidAddr) (pure Nothing) cpuAddr
 
-    addr = mux allowCPU (fromMaybe 0 <$> cpuAddr) vidAddr
-    write' = liftA2 (,) <$> cpuAddr <*> write
-    load = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr write'
-    cpuRead = enable (delayI False allowCPU) load
+        addr = fromMaybe 0 <$> muxA [addr1, addr2]
+        write' = liftA2 (,) <$> cpuAddr <*> write
+        load = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr write'
 
     newCol = fromSignal $ changed Nothing bufI
     block = delayedRegister 0x00 $ \block ->
-        mux (delayI False newBlock) load $
+        mux (isJust <$> vidRead) (fromJust <$> vidRead) $
         mux (delayI False newCol) ((`shiftR` 1) <$> block) $
         block
 
