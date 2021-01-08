@@ -27,7 +27,7 @@ video
        , Signal Dom25 (Maybe (Unsigned 8))
        , Signal Dom25 (Maybe (Index VidY))
        )
-video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaSync rgb, toSignal cpuRead, matchDelay rgb Nothing line)
+video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> cpuWrite) = (delayVGA vgaSync rgb, toSignal cpuRead, matchDelay rgb Nothing line)
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
@@ -40,17 +40,12 @@ video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> write) = (delayVGA vgaS
 
     vidAddr = enable (delayI False newBlock) $ base + offset
 
-    vidRead :> cpuRead :> Nil =
-        enable (delayI False $ isJust <$> addr1) load :>
-        enable (delayI False $ isJust <$> addr2) load :>
+    vidRead :> cpuRead :> Nil = sharedDelayed ram $
+        (vidAddr, pure Nothing) :>
+        (cpuAddr, cpuWrite) :>
         Nil
       where
-        addr1 = vidAddr
-        addr2 = mux (isJust <$> vidAddr) (pure Nothing) cpuAddr
-
-        addr = fromMaybe 0 <$> muxA [addr1, addr2]
-        write' = liftA2 (,) <$> cpuAddr <*> write
-        load = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr write'
+        ram addr wr = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
 
     newCol = fromSignal $ changed Nothing bufI
     block = delayedRegister 0x00 $ \block ->
