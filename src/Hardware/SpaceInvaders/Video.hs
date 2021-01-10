@@ -15,8 +15,10 @@ import Control.Monad.State
 createDomain vSystem{vName="Dom25", vPeriod = hzToPeriod 25_175_000}
 
 type VidX = 256
+type BufX = VidX `Div` 8
 type VidY = 224
-type VidSize = VidX * VidY `Div` 8
+type BufY = VidY
+type VidSize = BufX * BufY
 type VidAddr = Index VidSize
 
 video
@@ -27,36 +29,38 @@ video
        , Signal Dom25 (Maybe (Unsigned 8))
        , Signal Dom25 (Maybe (Index VidY))
        )
-video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> cpuWrite) = (delayVGA vgaSync rgb, toSignal cpuRead, matchDelay rgb Nothing line)
+video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
+    ( delayVGA vgaSync rgb
+    , toSignal extRead
+    , matchDelay rgb Nothing line
+    )
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
-    (bufX, bufI) = scale @(VidX `Div` 8) (SNat @8) . fst . scale (SNat @2) . center $ vgaX
-    (bufY, bufScale) = scale @VidY (SNat @2) . center $ vgaY
+    (bufX, pixX) = scale (SNat @8) . fst . scale (SNat @2) . center $ vgaX
+    (bufY, scanline) = scale (SNat @2) . center $ vgaY
 
-    visible = fromSignal $ isJust <$> bufX .&&. isJust <$> bufY
-    (_, base) = addressBy (snatToNum (SNat @(VidX `Div` 8))) bufY
-    (newBlock, offset) = addressBy 1 bufX
+    lineEnd = isFalling False (isJust <$> bufX) .&&. scanline .== Just maxBound
+    line = guardA lineEnd bufY
 
-    vidAddr = enable (delayI False newBlock) $ base + offset
+    bufAddr = fromSignal $ liftA2 toVidAddr <$> bufX <*> bufY
+    intAddr = guardA (liftD (changed Nothing) bufAddr) bufAddr
 
-    vidRead :> cpuRead :> Nil = sharedDelayed ram $
-        (vidAddr, pure Nothing) :>
-        (cpuAddr, cpuWrite) :>
+    intRead :> extRead :> Nil = sharedDelayed ram $
+        (intAddr, pure Nothing) :>
+        (extAddr, extWrite) :>
         Nil
       where
         ram addr wr = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
 
-    newCol = fromSignal $ changed Nothing bufI
+    newPix = delayI False . fromSignal $ changed Nothing pixX
     block = delayedRegister 0x00 $ \block ->
-        mux (isJust <$> vidRead) (fromJust <$> vidRead) $
-        mux (delayI False newCol) ((`shiftR` 1) <$> block) $
+        muxMaybe intRead $
+        mux newPix ((`shiftR` 1) <$> block) $
         block
 
-    lineEnd = isFalling False (isJust <$> bufX) .&&. bufScale .== Just maxBound
-    line = mux lineEnd bufY (pure Nothing)
-
-    pixel = enable (delayI False visible) $ lsb <$> block
+    visible = delayI False $ isJust <$> bufAddr
+    pixel = enable visible $ lsb <$> block
 
     rgb = maybe frame palette <$> pixel
 
@@ -64,16 +68,5 @@ video (unsafeFromSignal -> cpuAddr) (unsafeFromSignal -> cpuWrite) = (delayVGA v
     palette 0 = (0x00, 0x00, 0x00)
     palette 1 = (0xff, 0xff, 0xff)
 
-addressBy
-    :: (HiddenClockResetEnable dom, NFDataX coord, NFDataX addr, Num coord, Eq coord, Num addr)
-    => addr
-    -> Signal dom (Maybe coord)
-    -> (DSignal dom 0 Bool, DSignal dom 1 addr)
-addressBy stride coord = (new, addr)
-  where
-    start = fromSignal $ coord .== Just 0
-    new = fromSignal $ changed Nothing coord
-    addr = delayedRegister 0 $ \addr ->
-        mux (delayI False start) 0 $
-        mux new (addr + pure stride) $
-        addr
+toVidAddr :: Index BufX -> Index BufY -> VidAddr
+toVidAddr x y = bitCoerce (y, x)
