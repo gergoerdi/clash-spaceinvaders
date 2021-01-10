@@ -49,7 +49,7 @@ topEntity = withEnableGen board
             , pStart = fromActive <$> d .||. keyState 0x05a sc -- Enter
             }
         p2 = p1
-            { pStart = pure False
+            { pStart = pure False -- TODO
             }
 
         (vga, vidRead, lineEnd) = video vidAddr vidWrite

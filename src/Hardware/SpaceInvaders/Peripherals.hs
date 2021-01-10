@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase, StandaloneDeriving, DerivingVia, UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving, DerivingVia, UndecidableInstances #-}
+{-# LANGUAGE LambdaCase, RecordWildCards #-}
 module Hardware.SpaceInvaders.Peripherals where
 
 import Clash.Prelude
@@ -29,22 +30,11 @@ peripherals
     -> Signal dom (Pure Player)
     -> Signal dom (Maybe (PortCommand (Index 7) (Unsigned 8)))
     -> Signal dom (Maybe (Unsigned 8))
-peripherals dips tilt coin p1 p2 cmd = mealyStateB (uncurry step) (0, 0) (inputs, cmd)
+peripherals sws tilt coin p1 p2 cmd = mealyStateB (uncurry step) (0, 0) (inputs, cmd)
   where
-    inputs = route <$> dips <*> (boolToBit <$> tilt) <*> (boolToBit <$> coin) <*> p1 <*> p2
+    inputs = portBytes <$> sws <*> tilt <*> coin <*> p1 <*> p2
 
-    route :: BitVector 8 -> Bit -> Bit -> Pure Player -> Pure Player -> (Unsigned 8, Unsigned 8, Unsigned 8)
-    route dips tilt coin p1 p2 = bitCoerce (inp0, inp1, inp2)
-      where
-        joy p = bitCoerce $ pRight p :> pLeft p :> pShoot p :> Nil
-        start1 = boolToBit $ pStart p1
-        start2 = boolToBit $ pStart p2
-
-        inp0 = 0      :> joy p1 ++ 1      :> 1      :> 1      :> dips!4 :> Nil
-        inp1 = 0      :> joy p1 ++ 1      :> start1 :> start2 :> coin   :> Nil
-        inp2 = dips!7 :> joy p2 ++ dips!6 :> tilt   :> dips!5 :> dips!3 :> Nil
-
-    step (inp0, inp1, inp2) cmd = fmap (Just . fromMaybe 0x00) $ for cmd $ \case
+    step (inp0, inp1, inp2) cmd = for cmd $ \case
         ReadPort 0 -> do
             return inp0
         ReadPort 1 -> do
@@ -61,13 +51,28 @@ peripherals dips tilt coin p1 p2 cmd = mealyStateB (uncurry step) (0, 0) (inputs
             return 0x00
         _ -> return 0x00
 
-    shiftIn :: forall n. (KnownNat n) => Unsigned n -> BitVector (2 * n) -> BitVector (2 * n)
-    shiftIn new old = pack (new, old1)
-      where
-        (old1, _old2) = unpack old :: (Unsigned n, Unsigned n)
+shiftIn :: forall n. (KnownNat n) => Unsigned n -> BitVector (2 * n) -> BitVector (2 * n)
+shiftIn new old = pack (new, old1)
+  where
+    (old1, _old2) = unpack old :: (Unsigned n, Unsigned n)
 
-    startAt :: Index 8 -> BitVector 16 -> Unsigned 8
-    startAt offset value = result
-      where
-        (result, _) = unpack shiftedValue :: (Unsigned 8, Unsigned 8)
-        shiftedValue = value `rotateL` fromIntegral offset
+startAt :: Index 8 -> BitVector 16 -> Unsigned 8
+startAt offset value = result
+  where
+    (result, _) = unpack shiftedValue :: (Unsigned 8, Unsigned 8)
+    shiftedValue = value `rotateL` fromIntegral offset
+
+portBytes
+    :: BitVector 8
+    -> Bool
+    -> Bool
+    -> Pure Player
+    -> Pure Player
+    -> (Unsigned 8, Unsigned 8, Unsigned 8)
+portBytes sws tilt coin p1 p2 = (bitCoerce inp0, bitCoerce inp1, bitCoerce inp2)
+  where
+    inp0 = (low,   joy p1, high,  high,      high,      sws!4)
+    inp1 = (low,   joy p1, high,  pStart p1, pStart p2, coin)
+    inp2 = (sws!7, joy p2, sws!6, tilt,      sws!5,     sws!3)
+
+    joy MkPlayer{..} = (pRight, pLeft, pShoot)
