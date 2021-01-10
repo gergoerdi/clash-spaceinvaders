@@ -2,6 +2,7 @@
 module Hardware.SpaceInvaders.Video where
 
 import Clash.Prelude
+import qualified Clash.Signal.Delayed.Bundle as D
 import RetroClash.Utils
 import RetroClash.VGA
 import RetroClash.Video
@@ -46,12 +47,13 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
     bufAddr = liftA2 toVidAddr <$> bufX <*> bufY
     intAddr = guardA (liftD (changed Nothing) bufAddr) bufAddr
 
-    intRead :> extRead :> Nil = sharedDelayed ram $
-        (intAddr, pure Nothing) :>
-        (extAddr, extWrite) :>
+    intRead :> extRead :> Nil = sharedDelayed (ram . D.unbundle) $
+        noWrite intAddr :>
+        extAddr `withWrite` extWrite :>
         Nil
       where
-        ram addr wr = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
+        ram (addr, wr) = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
+
 
     newPix = delayI False $ liftD (changed Nothing) pixX
     block = delayedRegister 0x00 $ \block ->
