@@ -32,18 +32,18 @@ video
 video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
     ( delayVGA vgaSync rgb
     , toSignal extRead
-    , matchDelay rgb Nothing line
+    , toSignal $ delayI Nothing line <* rgb
     )
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
-    (bufX, pixX) = scale (SNat @8) . fst . scale (SNat @2) . center $ vgaX
-    (bufY, scanline) = scale (SNat @2) . center $ vgaY
+    (fromSignal -> bufX, fromSignal -> pixX) = scale (SNat @8) . fst . scale (SNat @2) . center $ vgaX
+    (fromSignal -> bufY, fromSignal -> scanline) = scale (SNat @2) . center $ vgaY
 
-    lineEnd = isFalling False (isJust <$> bufX) .&&. scanline .== Just maxBound
+    lineEnd = liftD (isFalling False) (isJust <$> bufX) .&&. scanline .== Just maxBound
     line = guardA lineEnd bufY
 
-    bufAddr = fromSignal $ liftA2 toVidAddr <$> bufX <*> bufY
+    bufAddr = liftA2 toVidAddr <$> bufX <*> bufY
     intAddr = guardA (liftD (changed Nothing) bufAddr) bufAddr
 
     intRead :> extRead :> Nil = sharedDelayed ram $
@@ -53,7 +53,7 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
       where
         ram addr wr = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
 
-    newPix = delayI False . fromSignal $ changed Nothing pixX
+    newPix = delayI False $ liftD (changed Nothing) pixX
     block = delayedRegister 0x00 $ \block ->
         muxMaybe intRead $
         mux newPix ((`shiftR` 1) <$> block) $
