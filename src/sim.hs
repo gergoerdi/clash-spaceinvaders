@@ -5,28 +5,30 @@ import RetroClash.Sim.IO
 import RetroClash.Sim.SDL
 import RetroClash.Barbies
 import Hardware.SpaceInvaders
-import Hardware.SpaceInvaders.Video
+import Hardware.SpaceInvaders.Video (VidAddr, VidX, VidY)
 
 import Data.Array.IO
 import Control.Monad
+import Data.Foldable (for_)
+import Data.Traversable (for)
 import Control.Monad.IO.Class
 import Data.Word
 import Data.Tuple.Curry
 
-world
+video
     :: IOArray Word16 (Unsigned 8)
     -> BufferArray VidX VidY
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
     -> IO (Maybe (Unsigned 8))
-world vid vbuf vidAddr vidWrite = do
-    vidRead <- traverse (readArray vid . fromIntegral) vidAddr
-    forM_ (liftA2 (,) vidAddr vidWrite) $ \(addr, wr) -> do
-        writeArray vid (fromIntegral addr) wr
+video varr vbuf vidAddr vidWrite = for vidAddr $ \addr -> do
+    vidRead <- readArray varr (fromIntegral addr)
+    for_ vidWrite $ \wr -> do
+        writeArray varr (fromIntegral addr) wr
         let (y, x0) = fromIntegral addr `divMod` 32
         let fg = 0xff_ff_ff
             bg = 0x00_00_00
-        forM_ [0..7] $ \i -> do
+        for_ [0..7] $ \i -> do
             let pixel = bitToBool $ wr!i
                 color = if pixel then fg else bg
             writeArray (getArray vbuf) (x0 * 8 + i, y) color
@@ -34,7 +36,7 @@ world vid vbuf vidAddr vidWrite = do
 
 main :: IO ()
 main = do
-    vid <- newArray (0, 0x1bff) 0
+    varr <- newArray (0, 0x1bff) 0
     vbuf <- newBufferArray
 
     let p0 = MkPlayer False False False False
@@ -60,7 +62,7 @@ main = do
 
         liftIO $ do
             let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do
-                    vidRead <- world vid vbuf vidAddr vidWrite
+                    vidRead <- video varr vbuf vidAddr vidWrite
                     return (dips, tilt, coin, p1, p2, vidRead, line)
             replicateM_ 5000 $ run Nothing
             run $ Just 95
