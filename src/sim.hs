@@ -17,7 +17,7 @@ import Data.Tuple.Curry
 
 video
     :: IOArray VidAddr (Unsigned 8)
-    -> BufferArray VidX VidY
+    -> BufferArray VidY VidX
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
     -> IO (Maybe (Unsigned 8))
@@ -33,7 +33,7 @@ video varr vbuf vidAddr vidWrite = for vidAddr $ \addr -> do
             let x = x0' + i
                 pixel = bitToBool $ wr!i
                 color = if pixel then fg else bg
-            writeArray (getArray vbuf) (x, y) color
+            writeArray (getArray vbuf) (y, maxBound - x) color
     return vidRead
 
 main :: IO ()
