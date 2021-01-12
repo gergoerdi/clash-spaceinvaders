@@ -16,15 +16,15 @@ import Data.Word
 import Data.Tuple.Curry
 
 video
-    :: IOArray Word16 (Unsigned 8)
+    :: IOArray VidAddr (Unsigned 8)
     -> BufferArray VidX VidY
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
     -> IO (Maybe (Unsigned 8))
 video varr vbuf vidAddr vidWrite = for vidAddr $ \addr -> do
-    vidRead <- readArray varr (fromIntegral addr)
+    vidRead <- readArray varr addr
     for_ vidWrite $ \wr -> do
-        writeArray varr (fromIntegral addr) wr
+        writeArray varr addr wr
         let (y, x0) = fromIntegral addr `divMod` 32
         let fg = 0xff_ff_ff
             bg = 0x00_00_00
