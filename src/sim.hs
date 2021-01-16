@@ -5,7 +5,7 @@ import RetroClash.Sim.IO
 import RetroClash.Sim.SDL
 import RetroClash.Barbies
 import Hardware.SpaceInvaders
-import Hardware.SpaceInvaders.Video (VidAddr, VidX, VidY)
+import Hardware.SpaceInvaders.Video (VidAddr, VidX, VidY, BufX, BufY)
 
 import Data.Array.IO
 import Control.Monad
@@ -25,13 +25,15 @@ video varr vbuf vidAddr vidWrite = for vidAddr $ \addr -> do
     vidRead <- readArray varr addr
     for_ vidWrite $ \wr -> do
         writeArray varr addr wr
-        let (y, x0) = fromIntegral addr `divMod` 32
+        let (y, x0) = bitCoerce addr :: (Index BufY, Index BufX)
+            x0' = fromIntegral x0 * 8
         let fg = 0xff_ff_ff
             bg = 0x00_00_00
         for_ [0..7] $ \i -> do
-            let pixel = bitToBool $ wr!i
+            let x = x0' + i
+                pixel = bitToBool $ wr!i
                 color = if pixel then fg else bg
-            writeArray (getArray vbuf) (x0 * 8 + i, y) color
+            writeArray (getArray vbuf) (x, y) color
     return vidRead
 
 main :: IO ()
