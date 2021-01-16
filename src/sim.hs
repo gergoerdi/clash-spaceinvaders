@@ -26,11 +26,11 @@ video varr vidAddr vidWrite = for vidAddr $ \addr -> do
     traverse_ (writeArray varr addr) vidWrite
     return vidRead
 
-rasterizeVideoBuf :: (MonadIO m) => IOArray VidAddr (Unsigned 8) -> m (Rasterizer VidX VidY)
+rasterizeVideoBuf :: (MonadIO m) => IOArray VidAddr (Unsigned 8) -> m (Rasterizer VidY VidX)
 rasterizeVideoBuf varr = do
     arr <- liftIO $ freeze varr
     return $ rasterizePattern $ \x y ->
-      let (addr, i) = toAddr x y
+      let (addr, i) = toAddr (maxBound - y) x
           block = arr ! addr
       in if testBit block (fromIntegral i) then fg else bg
   where
