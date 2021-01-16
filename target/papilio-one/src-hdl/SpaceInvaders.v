@@ -29,8 +29,18 @@ module SpaceInvaders (
    topEntity u_topEntity
      (.CLK_25MHZ(CLK_25MHZ),
       .RESET(!CLK_LOCKED),
+
+      .SWITCHES(8'b00000000),
+
+      .BTN_CENTER(1'b0),
+      .BTN_UP(1'b0),
+      .BTN_DOWN(1'b0),
+      .BTN_LEFT(1'b0),
+      .BTN_RIGHT(1'b0),
+
       .PS2_CLK(PS2CLK_A),
       .PS2_DATA(PS2DATA_A),
+
       .VGA_VSYNC(VGA_VSYNC),
       .VGA_HSYNC(VGA_HSYNC),
       .VGA_RED(VGA_RED_FULL[7:0]),

@@ -28,8 +28,10 @@ machine by Taito.
   reads from the framebuffer area will block the CPU until the video
   system is done reading.
 * **Sound**: Unimplemented.
-* **Inputs**: PS/2 keyboard. `C` to deposit a coin, `Enter` to start
-  1P game, and `Left` / `Right` / `RCtrl` to move and fire with P1.
+* **Inputs**:
+  * Direct pushbuttons
+  * PS/2 keyboard: `C` to deposit a coin, `Enter` to start
+    1P game, and `Left` / `Right` / `RCtrl` to move and fire with P1.
 
 ## Limitations
 
