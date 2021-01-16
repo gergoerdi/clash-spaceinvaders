@@ -77,11 +77,11 @@ mainBoard sws tilt coin p1 p2 vidRead line = (vidAddr, vidWrite)
         mux (line .== Just 223) (pure $ Just 2) $
         pure Nothing
 
-    (dataIn, (vidAddr, vidWrite)) = memoryMap _addrOut _dataOut $ override rst $ do
-        rom <- romFromFile (SNat @0x2000) "_build/SpaceInvaders.bin"
+    (dataIn, (vidAddr, vidWrite)) = $(memoryMap @(Either (Unsigned 8) (Unsigned 16)) [|_addrOut|] [|_dataOut|] $ override [|rst|] $ do
+        rom <- romFromFile (SNat @0x2000) [|"_build/SpaceInvaders.bin"|]
         ram <- ram0 (SNat @0x0400)
-        (vid, vidAddr, vidWrite) <- conduit vidRead
-        io <- port_ $ peripherals sws tilt coin p1 p2
+        (vid, vidAddr, vidWrite) <- conduit @VidAddr [|vidRead|]
+        io <- port_ @(Index 7) [|peripherals sws tilt coin p1 p2|]
 
         matchLeft $ do
             from 0x00 $ connect io
@@ -92,6 +92,6 @@ mainBoard sws tilt coin p1 p2 vidRead line = (vidAddr, vidWrite)
             from 0x2400 $ connect vid
             from 0x4000 $ connect ram
 
-        return (vidAddr, vidWrite)
+        return (vidAddr, vidWrite))
 
 makeTopEntity 'topEntity
