@@ -16,6 +16,24 @@ import Control.Monad.IO.Class
 import Data.Word
 import Data.Tuple.Curry
 
+inputs
+    :: (Scancode -> Bool)
+    -> (BitVector 8, Bool, Bool, Pure Player, Pure Player)
+inputs keyDown = (sws, tilt, coin, p1, p2)
+  where
+    sws = 0b0000_0000
+    tilt = False
+    coin = keyDown ScancodeC
+    p1 = MkPlayer
+        { pLeft = keyDown ScancodeLeft
+        , pRight = keyDown ScancodeRight
+        , pShoot = keyDown ScancodeLCtrl
+        , pStart = keyDown ScancodeReturn
+        }
+    p2 = p1
+        { pStart = False -- TODO
+        }
+
 video
     :: IOArray VidAddr (Unsigned 8)
     -> Maybe VidAddr
@@ -54,19 +72,7 @@ main = do
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
-        let sws = 0b0000_0000
-            tilt = False
-            coin = keyDown ScancodeC
-            p1 = MkPlayer
-                { pLeft = keyDown ScancodeLeft
-                , pRight = keyDown ScancodeRight
-                , pShoot = keyDown ScancodeLCtrl
-                , pStart = keyDown ScancodeReturn
-                }
-            p2 = p1
-                { pStart = False -- TODO
-                }
-
+        let (sws, tilt, coin, p1, p2) = inputs keyDown
         liftIO $ do
             let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do
                     vidRead <- video varr vidAddr vidWrite
