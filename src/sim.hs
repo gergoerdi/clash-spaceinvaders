@@ -47,7 +47,7 @@ main = do
     withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
-        let dips = 0b0000_0000
+        let sws = 0b0000_0000
             tilt = False
             coin = keyDown ScancodeC
             p1 = MkPlayer
@@ -63,7 +63,7 @@ main = do
         liftIO $ do
             let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do
                     vidRead <- video varr vbuf vidAddr vidWrite
-                    return (dips, tilt, coin, p1, p2, vidRead, line)
+                    return (sws, tilt, coin, p1, p2, vidRead, line)
             replicateM_ 5000 $ run Nothing
             run $ Just 95
             replicateM_ 5000 $ run Nothing

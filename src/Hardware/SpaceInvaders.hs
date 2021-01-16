@@ -35,7 +35,7 @@ topEntity
     -> "VGA"       ::: VGAOut Dom25 8 8 8
 topEntity = withEnableGen board
   where
-    board dips (c, u, d, l, r) ps2 = vga
+    board sws (c, u, d, l, r) ps2 = vga
       where
         sc = parseScanCode . decodePS2 . samplePS2 $ ps2
 
@@ -49,11 +49,11 @@ topEntity = withEnableGen board
             , pStart = fromActive <$> d .||. keyState 0x05a sc -- Enter
             }
         p2 = p1
-            { pStart = pure False -- TODO
+            { pStart = fromActive <$> l .&&. fromActive <$> r
             }
 
-        (vga, vidRead, lineEnd) = video vidAddr vidWrite
-        (vidAddr, vidWrite) = mainBoard dips tilt coin (bbundle p1) (bbundle p2) vidRead lineEnd
+        (vga, vidRead, line) = video vidAddr vidWrite
+        (vidAddr, vidWrite) = mainBoard sws tilt coin (bbundle p1) (bbundle p2) vidRead line
 
 mainBoard
     :: (HiddenClockResetEnable dom)
@@ -67,21 +67,21 @@ mainBoard
     -> ( Signal dom (Maybe VidAddr)
       , Signal dom (Maybe (Unsigned 8))
       )
-mainBoard dips tilt coin p1 p2 vidRead lineEnd = (vidAddr, vidWrite)
+mainBoard sws tilt coin p1 p2 vidRead line = (vidAddr, vidWrite)
   where
     CPUOut{..} = intel8080 CPUIn{..}
 
     (interruptRequest, rst) = interruptor irq (delay False _interruptAck)
-    irq = muxA
-        [ enable (lineEnd .== Just 95) (pure 1)
-        , enable (lineEnd .== Just maxBound) (pure 2)
-        ]
+    irq =
+        mux (line .== Just 95) (pure $ Just 1) $
+        mux (line .== Just 223) (pure $ Just 2) $
+        pure Nothing
 
     (dataIn, (vidAddr, vidWrite)) = memoryMap _addrOut _dataOut $ override rst $ do
         rom <- romFromFile (SNat @0x2000) "_build/SpaceInvaders.bin"
         ram <- ram0 (SNat @0x0400)
         (vid, vidAddr, vidWrite) <- conduit vidRead
-        io <- port_ $ peripherals dips tilt coin p1 p2
+        io <- port_ $ peripherals sws tilt coin p1 p2
 
         matchLeft $ do
             from 0x00 $ connect io
