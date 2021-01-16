@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, NumericUnderscores #-}
-import Clash.Prelude
+import Clash.Prelude hiding ((!))
 
 import RetroClash.Sim.IO
 import RetroClash.Sim.SDL
@@ -8,8 +8,9 @@ import Hardware.SpaceInvaders
 import Hardware.SpaceInvaders.Video (VidAddr, VidX, VidY, BufX, BufY)
 
 import Data.Array.IO
+import Data.Array ((!))
 import Control.Monad
-import Data.Foldable (for_)
+import Data.Foldable (traverse_)
 import Data.Traversable (for)
 import Control.Monad.IO.Class
 import Data.Word
@@ -17,29 +18,33 @@ import Data.Tuple.Curry
 
 video
     :: IOArray VidAddr (Unsigned 8)
-    -> BufferArray VidY VidX
     -> Maybe VidAddr
     -> Maybe (Unsigned 8)
     -> IO (Maybe (Unsigned 8))
-video varr vbuf vidAddr vidWrite = for vidAddr $ \addr -> do
+video varr vidAddr vidWrite = for vidAddr $ \addr -> do
     vidRead <- readArray varr addr
-    for_ vidWrite $ \wr -> do
-        writeArray varr addr wr
-        let (y, x0) = bitCoerce addr :: (Index BufY, Index BufX)
-            x0' = fromIntegral x0 * 8
-        let fg = 0xff_ff_ff
-            bg = 0x00_00_00
-        for_ [0..7] $ \i -> do
-            let x = x0' + i
-                pixel = bitToBool $ wr!i
-                color = if pixel then fg else bg
-            writeArray (getArray vbuf) (y, maxBound - x) color
+    traverse_ (writeArray varr addr) vidWrite
     return vidRead
+
+rasterizeVideoBuf :: (MonadIO m) => IOArray VidAddr (Unsigned 8) -> m (Rasterizer VidX VidY)
+rasterizeVideoBuf varr = do
+    arr <- liftIO $ freeze varr
+    return $ rasterizePattern $ \x y ->
+      let (addr, i) = toAddr x y
+          block = arr ! addr
+      in if testBit block (fromIntegral i) then fg else bg
+  where
+    toAddr x y = (addr, i)
+      where
+        (x0, i) = bitCoerce x :: (Index BufX, Index 8)
+        addr = bitCoerce (y, x0)
+
+    fg = (0xff, 0xff, 0xff)
+    bg = (0x00, 0x00, 0x00)
 
 main :: IO ()
 main = do
-    varr <- newArray (0, 0x1bff) 0
-    vbuf <- newBufferArray
+    varr <- newArray (minBound, maxBound) 0
 
     let p0 = MkPlayer False False False False
     sim <- simulateIO_ @System
@@ -64,13 +69,13 @@ main = do
 
         liftIO $ do
             let run line = sim $ uncurryN $ \ vidAddr vidWrite -> do
-                    vidRead <- video varr vbuf vidAddr vidWrite
+                    vidRead <- video varr vidAddr vidWrite
                     return (sws, tilt, coin, p1, p2, vidRead, line)
             replicateM_ 5000 $ run Nothing
             run $ Just 95
             replicateM_ 5000 $ run Nothing
             run $ Just maxBound
-        return $ rasterizeBuffer vbuf
+        rasterizeVideoBuf varr
 
 videoParams :: VideoParams
 videoParams = MkVideoParams
