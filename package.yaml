@@ -90,8 +90,23 @@ executables:
       - retroclash-sim
       - sdl2
 
-  spaceinvaders-verilator:
-    main: sim-verilator.hs
+  spaceinvaders-verilator-board:
+    main: sim-verilator-board.hs
+    dependencies:
+      - retroclash-sim
+      - sdl2
+      - extra
+    when:
+    - condition: flag(verilator)
+      then:
+        verbatim:
+          x-clashilator-top-is: Hardware.SpaceInvaders.SimBoard
+          x-clashilator-clock: CLK
+      else:
+        buildable: false
+
+  spaceinvaders-verilator-full:
+    main: sim-verilator-full.hs
     dependencies:
       - retroclash-sim
       - sdl2
