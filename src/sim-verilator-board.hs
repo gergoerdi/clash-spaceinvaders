@@ -1,34 +1,26 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, NumericUnderscores #-}
 import Clash.Prelude
 
+import Hardware.SpaceInvaders.Sim
+
 import Clash.Clashilator.FFI
 import Foreign.Storable
 import Foreign.Marshal.Alloc
 
+import RetroClash.Barbies
 import RetroClash.Sim.SDL
-
--- import Data.Array.IO
--- import Control.Monad
--- import Control.Monad.IO.Class
--- import Data.Word
--- import Data.Tuple.Curry
-
-
-import RetroClash.VGA
-import RetroClash.Sim.SDL
-import RetroClash.Sim.VGA
-import RetroClash.Sim.VGASDL
 
 import Control.Monad.State
 import Data.Maybe
 import Data.Word
-import Data.Array ((!))
 import Data.Array.IO
 import Data.Bits
 import SDL.Event as SDL
 import SDL.Input.Keyboard
 import SDL.Input.Keyboard.Codes
 import Control.Monad.Extra
+
+import Debug.Trace
 
 {-# INLINE withRunner #-}
 withRunner :: ((INPUT -> IO OUTPUT) -> IO a) -> IO a
@@ -44,35 +36,53 @@ withRunner act = alloca $ \inp -> alloca $ \outp -> do
 
 main :: IO ()
 main = withRunner $ \runCycle -> do
-    buf <- newBufferArray
+    varr <- newArray (minBound, maxBound) 0
 
-    flip evalStateT initSink $ withMainWindow videoParams $ \events keyDown -> do
+    flip evalStateT Nothing $ withMainWindow videoParams $ \events keyDown -> do
         guard $ not $ keyDown ScancodeEscape
 
         let input = INPUT
                 { iRESET = low
                 , iSWITCHES = 0b0000_0000
-                , iBTN_CENTER = low
-                , iBTN_UP = low
-                , iBTN_DOWN = low
-                , iBTN_LEFT = low
-                , iBTN_RIGHT = low
-                , iPS2_CLK = low
-                , iPS2_DATA = low
+                , iTILT = low
+                , iCOIN = low        -- TODO
+                , iPLAYER1 = 0 -- toFFI $ Nothing @(Pure Player)
+                , iPLAYER2 = 0 -- toFFI $ Nothing @(Pure Player)
+                , iVID_READ = toFFI $ Nothing @(Unsigned 8)
+                , iVID_LINE = toFFI $ Nothing @(Index VidY)
                 }
 
-        whileM $ do
-            vgaOut <- do
+        let step line = do
+                vidRead <- get
                 OUTPUT{..} <- liftIO $ runCycle input
-                return (oVGA_HSYNC, oVGA_VSYNC, (oVGA_RED, oVGA_GREEN, oVGA_BLUE))
-            fmap not $ vgaSinkBuf vga640x480at60 buf vgaOut
+                    { iVID_LINE = toFFI (line :: Maybe (Index VidY))
+                    , iVID_READ = toFFI vidRead
+                    }
+                let vidAddr = fromFFI oVID_ADDR
+                    vidWrite = fromFFI oVID_WRITE
+                vidRead <- liftIO $ video varr vidAddr vidWrite
+                put vidRead
 
-        return $ rasterizeBuffer buf
+        replicateM_ 6000 $ step Nothing
+        step $ Just 95
+        replicateM_ 6000 $ step Nothing
+        step $ Just maxBound
+
+        rasterizeVideoBuf varr
+
+toFFI :: (BitPack a, BitPack b, KnownNat n, BitSize b ~ (BitSize a + n)) => a -> b
+toFFI = bitCoerce . map ensureBit . unpack . resize . pack
+  where
+    ensureBit :: Bit -> Bit
+    ensureBit b = if hasUndefined b then 0 else b
+
+fromFFI :: (BitPack a, BitPack b, KnownNat n, BitSize b ~ (BitSize a + n)) => b -> a
+fromFFI = unpack . resize . pack
 
 videoParams :: VideoParams
 videoParams = MkVideoParams
     { windowTitle = "Space Invaders"
-    , screenScale = 2
+    , screenScale = 4
     , screenRefreshRate = 60
     , reportFPS = True
     }
