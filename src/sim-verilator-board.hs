@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, NumericUnderscores #-}
 import Clash.Prelude
+import Clash.Sized.Internal.BitVector
 
 import Hardware.SpaceInvaders.Sim
 
@@ -71,10 +72,10 @@ main = withRunner $ \runCycle -> do
         rasterizeVideoBuf varr
 
 toFFI :: (BitPack a, BitPack b, KnownNat n, BitSize b ~ (BitSize a + n)) => a -> b
-toFFI = bitCoerce . map ensureBit . unpack . resize . pack
-  where
-    ensureBit :: Bit -> Bit
-    ensureBit b = if hasUndefined b then 0 else b
+toFFI = unpack . ensureBits . resize . pack
+
+ensureBits :: BitVector n -> BitVector n
+ensureBits (BV _mask bs) = BV 0 bs
 
 fromFFI :: (BitPack a, BitPack b, KnownNat n, BitSize b ~ (BitSize a + n)) => b -> a
 fromFFI = unpack . resize . pack
