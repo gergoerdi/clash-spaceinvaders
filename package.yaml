@@ -100,7 +100,8 @@ executables:
     - condition: flag(verilator)
       then:
         verbatim:
-          x-clashilator-top-is: Hardware.SpaceInvaders.SimBoard
+          x-clashilator-top-is: Hardware.SpaceInvaders
+          x-clashilator-entity: boardEntity
           x-clashilator-clock: CLK
       else:
         buildable: false
