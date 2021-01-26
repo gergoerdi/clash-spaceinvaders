@@ -42,7 +42,8 @@ main = shakeArgs shakeOptions{ shakeFiles = outDir } $ do
         [ "src" ]
         "Hardware.SpaceInvaders"
         [ "-Wno-partial-type-signatures"
-        -- , "-fclash-inline-limit=600"
+        , "-fclash-inline-limit=500"
+        , "-fclash-spec-limit=100"
         ] $
         need [romFile]
 

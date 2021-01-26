@@ -103,6 +103,9 @@ executables:
           x-clashilator-top-is: Hardware.SpaceInvaders
           x-clashilator-entity: boardEntity
           x-clashilator-clock: CLK
+          x-clashilator-clash-flags:
+            -fclash-inline-limit=100
+            -fclash-spec-limit=100
       else:
         buildable: false
 
@@ -118,5 +121,8 @@ executables:
         verbatim:
           x-clashilator-top-is: Hardware.SpaceInvaders
           x-clashilator-clock: CLK_25MHZ
+          x-clashilator-clash-flags:
+            -fclash-inline-limit=100
+            -fclash-spec-limit=100
       else:
         buildable: false
