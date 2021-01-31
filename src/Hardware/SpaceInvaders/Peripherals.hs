@@ -29,12 +29,12 @@ peripherals
     -> Signal dom (Pure Player)
     -> Signal dom (Pure Player)
     -> Signal dom (Maybe (PortCommand (Index 7) (Unsigned 8)))
-    -> Signal dom (Maybe (Unsigned 8))
+    -> Signal dom (Unsigned 8)
 peripherals sws tilt coin p1 p2 cmd = mealyStateB (uncurry step) (0, 0) (inputs, cmd)
   where
     inputs = portBytes <$> sws <*> tilt <*> coin <*> p1 <*> p2
 
-    step (inp0, inp1, inp2) cmd = for cmd $ \case
+    step (inp0, inp1, inp2) cmd = fmap fromJustX $ for cmd $ \case
         ReadPort 0 -> do
             return inp0
         ReadPort 1 -> do

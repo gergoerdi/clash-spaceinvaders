@@ -12,10 +12,8 @@ extra-deps:
     subdirs:
       - smash-core
 
-  - constraints-extras-0.3.0.2
-  - dependent-sum-0.7.1.0
-  - dependent-map-0.4.0.0
-  - some-1.0.1
+  - lift-type-0.1.0.1
+  - monoidal-containers-0.6.0.1
 
 packages:
   - retroclash-lib
