@@ -52,7 +52,7 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
         extAddr `withWrite` extWrite :>
         Nil
       where
-        ram (addr, wr) = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
+        ram (addr, wr) = delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0)) addr (packWrite <$> addr <*> wr)
 
     newPix = delayI False $ liftD (changed Nothing) pixX
 
