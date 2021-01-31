@@ -54,15 +54,10 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
       where
         ram (addr, wr) = delayedRam (blockRam1 ClearOnReset (SNat @VidSize) 0) addr (packWrite <$> addr <*> wr)
 
-
     newPix = delayI False $ liftD (changed Nothing) pixX
-    block = delayedRegister 0x00 $ \block ->
-        muxMaybe intRead $
-        mux newPix ((`shiftR` 1) <$> block) $
-        block
 
     visible = delayI False $ isJust <$> bufAddr
-    pixel = enable visible $ lsb <$> block
+    pixel = enable visible $ liftD2 shifterR intRead newPix
 
     rgb = maybe frame palette <$> pixel
 
