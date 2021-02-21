@@ -47,12 +47,12 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
     bufAddr = liftA2 toVidAddr <$> bufX <*> bufY
     intAddr = guardA (liftD (changed Nothing) bufAddr) bufAddr
 
-    intRead :> extRead :> Nil = sharedDelayed (ram . D.unbundle . ((0, Nothing) |>.)) $
+    intRead :> extRead :> Nil = sharedDelayedRW ram $
         noWrite intAddr :>
         extAddr `withWrite` extWrite :>
         Nil
       where
-        ram (addr, wr) = delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0)) addr (packWrite <$> addr <*> wr)
+        ram = singlePort $ delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0))
 
     newPix = delayI False $ liftD (changed Nothing) pixX
 
