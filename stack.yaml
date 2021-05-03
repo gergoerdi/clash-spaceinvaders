@@ -4,6 +4,8 @@ extra-deps:
   - barbies-2.0.2.0
   - barbies-th-0.1.7
   - monad-supply-0.9
+  - lift-type-0.1.0.1
+  - monoidal-containers-0.6.0.1
 
   - terminal-0.2.0.0
 

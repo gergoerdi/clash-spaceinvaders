@@ -78,21 +78,24 @@ mainBoard sws tilt coin p1 p2 vidRead line = (vidAddr, vidWrite)
         mux (line .== Just 223) (pure $ Just 2) $
         pure Nothing
 
-    (dataIn, (vidAddr, vidWrite)) = $(memoryMap @(Either (Unsigned 8) (Unsigned 16)) [|_addrOut|] [|_dataOut|] $ do
-        rom <- romFromFile (SNat @0x2000) [|"_build/SpaceInvaders.bin"|]
-        ram <- ram0 (SNat @0x0400)
+    dataIn = Just 0 |>. dataIn'
+    (dataIn', (vidAddr, vidWrite)) = $(memoryMap [|_addrOut|] [|_dataOut|] $ do
+        rom <- mapH [|Just|] =<< romFromFile (SNat @0x2000) [|"_build/SpaceInvaders.bin"|]
+        ram <- mapH [|Just|] =<< ram0 (SNat @0x0400)
         (vid, vidAddr, vidWrite) <- conduit @VidAddr [|vidRead|]
         io <- port_ @(Index 7) [|peripherals sws tilt coin p1 p2|]
 
-        override [|rst|]
-        matchLeft $ do
-            from 0x00 $ connect io
+        override [|fmap Just <$> rst|]
 
-        matchRight $ do
-            from 0x0000 $ connect rom
-            from 0x2000 $ connect ram
-            from 0x2400 $ connect vid
-            from 0x4000 $ connect ram
+        matchJust $ do
+            matchLeft @(Unsigned 8) $ do
+                from 0x00 $ connect io
+
+            matchRight @(Unsigned 16) $ do
+                from 0x0000 $ connect rom
+                from 0x2000 $ connect ram
+                from 0x2400 $ connect vid
+                from 0x4000 $ connect ram
 
         return (vidAddr, vidWrite))
 
