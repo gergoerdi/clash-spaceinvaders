@@ -1,0 +1,11 @@
+name: clash-1.4.2
+resolver: lts-17.2
+
+packages:
+  - clash-prelude-1.4.2
+  - clash-lib-1.4.2
+  - clash-ghc-1.4.2
+
+  - arrows-0.4.4.2
+  - Stream-0.4.7.2
+  - lazysmallcheck-0.6

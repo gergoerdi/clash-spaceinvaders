@@ -47,7 +47,7 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
     bufAddr = liftA2 toVidAddr <$> bufX <*> bufY
     intAddr = guardA (liftD (changed Nothing) bufAddr) bufAddr
 
-    intRead :> extRead :> Nil = sharedDelayed (ram . D.unbundle) $
+    intRead :> extRead :> Nil = sharedDelayed (ram . D.unbundle . ((0, Nothing) |>.)) $
         noWrite intAddr :>
         extAddr `withWrite` extWrite :>
         Nil
