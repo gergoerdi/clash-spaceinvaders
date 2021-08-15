@@ -59,9 +59,9 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
     visible = delayI False $ isJust <$> bufAddr
     pixel = enable visible $ liftD2 shifterR intRead newPix
 
-    rgb = maybe frame palette <$> pixel
+    rgb = maybe border palette <$> pixel
 
-    frame = (0x30, 0x30, 0x30)
+    border = (0x30, 0x30, 0x30)
     palette 0 = (0x00, 0x00, 0x00)
     palette 1 = (0xff, 0xff, 0xff)
 
