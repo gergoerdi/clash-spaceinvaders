@@ -3,6 +3,9 @@
 This is a Clash implementation of the 1978 Space Invaders arcade
 machine by Taito.
 
+This code is part of the book *Retrocomputing with Clash: Haskell for
+FPGA Hardware Design* at <https://unsafePerform.IO/retroclash/>.
+
 [![Click to play YouTube video](https://img.youtube.com/vi/k-1MVmX2ytI/0.jpg)](https://www.youtube.com/watch?v=k-1MVmX2ytI)
 
 

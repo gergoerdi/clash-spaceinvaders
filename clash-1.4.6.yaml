@@ -1,0 +1,7 @@
+name: clash-1.4.6
+resolver: lts-18.14
+
+packages:
+  - clash-prelude-1.4.6
+  - clash-lib-1.4.6
+  - clash-ghc-1.4.6
