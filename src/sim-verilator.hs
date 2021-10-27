@@ -5,29 +5,12 @@ import Clash.Clashilator.FFI
 import Foreign.Storable
 import Foreign.Marshal.Alloc
 
-import RetroClash.Sim.SDL
-
--- import Data.Array.IO
--- import Control.Monad
--- import Control.Monad.IO.Class
--- import Data.Word
--- import Data.Tuple.Curry
-
-
 import RetroClash.VGA
 import RetroClash.Sim.SDL
 import RetroClash.Sim.VGA
 import RetroClash.Sim.VGASDL
 
 import Control.Monad.State
-import Data.Maybe
-import Data.Word
-import Data.Array ((!))
-import Data.Array.IO
-import Data.Bits
-import SDL.Event as SDL
-import SDL.Input.Keyboard
-import SDL.Input.Keyboard.Codes
 import Control.Monad.Extra
 
 {-# INLINE withRunner #-}

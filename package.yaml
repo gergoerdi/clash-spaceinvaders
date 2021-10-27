@@ -32,10 +32,8 @@ dependencies:
   - clash-shake
   - intel8080
 
-  - bytestring
   - mtl
   - transformers
-  - array
   - lens
   - barbies
   - barbies-th
@@ -79,6 +77,9 @@ source-dirs:
   - src
 
 flags:
+  sim:
+    manual: True
+    default: True
   verilator:
     manual: True
     default: False
@@ -88,19 +89,21 @@ executables:
     main: sim.hs
     dependencies:
       - retroclash-sim
-      - sdl2
+      - bytestring
+      - array
+    when:
+    - condition: "!flag(sim)"
+      buildable: false
 
   spaceinvaders-verilator:
     main: sim-verilator.hs
+    other-modules: []
     dependencies:
       - retroclash-sim
-      - sdl2
       - extra
+    verbatim:
+      x-clashilator-top-is: Hardware.SpaceInvaders
+      x-clashilator-clock: CLK_25MHZ
     when:
-    - condition: flag(verilator)
-      then:
-        verbatim:
-          x-clashilator-top-is: Hardware.SpaceInvaders
-          x-clashilator-clock: CLK_25MHZ
-      else:
-        buildable: false
+    - condition: "!(flag(sim) && flag(verilator))"
+      buildable: false
