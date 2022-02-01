@@ -1,3 +1,15 @@
 [submodule "clash-intel8080"]
 	path = clash-intel8080
 	url = git@github.com:gergoerdi/clash-intel8080.git
+[submodule "clash-shake"]
+	path = clash-shake
+	url = git@github.com:gergoerdi/clash-shake.git
+[submodule "retroclash-lib"]
+	path = retroclash-lib
+	url = git@github.com:gergoerdi/retroclash-lib.git
+[submodule "retroclash-sim"]
+	path = retroclash-sim
+	url = git@github.com:gergoerdi/retroclash-sim.git
+[submodule "clashilator"]
+	path = clashilator
+	url = git@github.com:gergoerdi/clashilator.git
