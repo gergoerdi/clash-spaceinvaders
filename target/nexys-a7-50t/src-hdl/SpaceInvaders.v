@@ -18,8 +18,6 @@ module SpaceInvaders (
            output [3:0] VGA_B
            );
 
-   wire                 CLK_25MHZ;
-   wire                 CLK_LOCKED;
    wire [7:0]           VGA_RED_FULL;
    wire [7:0]           VGA_GREEN_FULL;
    wire [7:0]           VGA_BLUE_FULL;
@@ -28,16 +26,33 @@ module SpaceInvaders (
    assign VGA_G = VGA_GREEN_FULL[7:4];
    assign VGA_B = VGA_BLUE_FULL[7:4];
 
-   ClockWiz25 u_ClockWiz25
+   wire                 CLK_LOCKED;
+   wire                 CLK_25MHZ_RAW;
+   wire                 CLK_8MHZ_RAW;
+
+   MMCM                 u_MMCM
      (.CLKIN_100MHZ(CLK100MHZ),
-      .CLKOUT_25MHZ(CLK_25MHZ),
       .LOCKED(CLK_LOCKED),
-      .reset(1'b0)
+      .CLKOUT_25MHZ(CLK_25MHZ_RAW),
+      .CLKOUT_8MHZ(CLK_8MHZ_RAW)
       );
+
+   wire                 CLK_25MHZ;
+   BUFG                 BUFG_25MHZ(.I(CLK_25MHZ_RAW), .O(CLK_25MHZ));
+
+   wire                 CLK_8MHZ;
+   BUFG                 BUFG_8MHZ(.I(CLK_8MHZ_RAW), .O(CLK_8MHZ));
+
+   reg [3:0]            CLK_1MHZ_DIV = 4'd0;
+   always @(posedge CLK_8MHZ) begin
+     CLK_1MHZ_DIV <= CLK_1MHZ_DIV + 4'd1;
+   end
+   wire                 CLK_1MHZ = CLK_1MHZ_DIV[3];
 
    topEntity u_topEntity
      (.CLK_25MHZ(CLK_25MHZ),
       .RESET(!CLK_LOCKED),
+      .CLK_1MHZ(CLK_1MHZ),
 
       .SWITCHES(SW[7:0]),
 

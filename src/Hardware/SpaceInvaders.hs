@@ -21,19 +21,31 @@ import RetroClash.Memory
 import RetroClash.Barbies
 import Data.Maybe
 
+-- | 1 MHz clock for the whole system except the video signal generator
+createDomain vSystem{vName="DomSys", vPeriod = hzToPeriod 1_000_000}
+
 topEntity
     :: "CLK_25MHZ" ::: Clock Dom25
     -> "RESET"     ::: Reset Dom25
-    -> "SWITCHES"  ::: Signal Dom25 (BitVector 8)
-    -> "BTN"       ::: ( "CENTER" ::: Signal Dom25 (Active High)
-                       , "UP"     ::: Signal Dom25 (Active High)
-                       , "DOWN"   ::: Signal Dom25 (Active High)
-                       , "LEFT"   ::: Signal Dom25 (Active High)
-                       , "RIGHT"  ::: Signal Dom25 (Active High)
+    -> "CLK_1MHZ"  ::: Clock DomSys
+    -> "SWITCHES"  ::: Signal DomSys (BitVector 8)
+    -> "BTN"       ::: ( "CENTER" ::: Signal DomSys (Active High)
+                       , "UP"     ::: Signal DomSys (Active High)
+                       , "DOWN"   ::: Signal DomSys (Active High)
+                       , "LEFT"   ::: Signal DomSys (Active High)
+                       , "RIGHT"  ::: Signal DomSys (Active High)
                        )
-    -> "PS2"       ::: PS2 Dom25
+    -> "PS2"       ::: PS2 DomSys
     -> "VGA"       ::: VGAOut Dom25 8 8 8
-topEntity = withEnableGen board
+topEntity clkVid rstVid clkSys =
+    withSpecificClock @DomSys  clkSys $
+    withSpecificClock @Dom25   clkVid $
+    let rstSys = convertReset rstVid in
+    withSpecificReset @DomSys  rstSys $
+    withSpecificReset @Dom25   rstVid $
+    withSpecificEnable @DomSys enableGen $
+    withSpecificEnable @Dom25  enableGen $
+    board
   where
     board sws (c, u, d, l, r) ps2 = vga
       where
@@ -52,7 +64,7 @@ topEntity = withEnableGen board
             { pStart = fromActive <$> l .&&. fromActive <$> r
             }
 
-        (vga, vidRead, line) = video vidAddr vidWrite
+        (vga, vidRead, line) = video2 vidAddr vidWrite
         (vidAddr, vidWrite) = mainBoard sws tilt coin (bbundle p1) (bbundle p2) vidRead line
 
 mainBoard
