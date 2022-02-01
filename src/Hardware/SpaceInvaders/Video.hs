@@ -69,13 +69,13 @@ video2 (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extW
 
     (vgaSync, rgb, intAddr, line) = video' intRead
 
-    packOp Nothing _ = RamRead 0
-    packOp (Just addr) wr = maybe (RamRead addr) (RamWrite addr) wr
+    packRamOp Nothing _ = RamRead 0
+    packRamOp (Just addr) wr = maybe (RamRead addr) (RamWrite addr) wr
 
     (unsafeFromSignal @_ @_ @1 -> intRead', unsafeFromSignal @_ @_ @1 -> extRead')
         = trueDualPortBlockRam
               (toSignal $ RamRead . fromMaybe 0 <$> intAddr)
-              (toSignal $ packOp <$> extAddr <*> extWrite)
+              (toSignal $ packRamOp <$> extAddr <*> extWrite)
 
     enRead
         :: (HiddenClockResetEnable dom, KnownNat k)
