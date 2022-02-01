@@ -3,6 +3,7 @@ module Hardware.SpaceInvaders.Video where
 
 import Clash.Prelude
 import qualified Clash.Signal.Delayed.Bundle as D
+import Clash.Prelude.BlockRam
 import RetroClash.Utils
 import RetroClash.VGA
 import RetroClash.Video
@@ -44,6 +45,50 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
         Nil
       where
         ram = singlePort $ delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0))
+
+video2
+    :: forall domSys domVid.
+       (HiddenClockResetEnable domSys)
+    => (HiddenClockResetEnable domVid, DomainPeriod domVid ~ HzToPeriod 25_175_000)
+    => Signal domSys (Maybe VidAddr)
+    -> Signal domSys (Maybe (Unsigned 8))
+    -> ( VGAOut domVid 8 8 8
+       , Signal domSys (Maybe (Unsigned 8))
+       , Signal domSys (Maybe (Index VidY))
+       )
+video2 (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWrite) =
+     ( delayVGA vgaSync rgb
+     , toSignal extRead
+     , toSys $ toSignal line
+     )
+  where
+    toSys :: (NFDataX a) => Signal domVid a -> Signal domSys a
+    toSys vid =
+        let (sys, _, _) = asyncFIFOSynchronizer (SNat @2) (pure True) (Just <$> vid)
+        in sys
+
+    (vgaSync, rgb, intAddr, line) = video' intRead
+
+    packOp Nothing _ = RamRead 0
+    packOp (Just addr) wr = maybe (RamRead addr) (RamWrite addr) wr
+
+    (unsafeFromSignal @_ @_ @1 -> intRead', unsafeFromSignal @_ @_ @1 -> extRead')
+        = trueDualPortBlockRam
+              (toSignal $ RamRead . fromMaybe 0 <$> intAddr)
+              (toSignal $ packOp <$> extAddr <*> extWrite)
+
+    enRead
+        :: (HiddenClockResetEnable dom, KnownNat k)
+        => DSignal dom n (Maybe addr)
+        -> DSignal dom (n + k) a
+        -> DSignal dom (n + k) (Maybe a)
+    enRead addr = enable $ delayI False (isJust <$> addr)
+
+    intRead :: DSignal domVid 1 (Maybe (Unsigned 8))
+    intRead = enRead intAddr intRead'
+
+    extRead :: DSignal domSys 1 (Maybe (Unsigned 8))
+    extRead = enRead extAddr extRead'
 
 video'
     :: (HiddenClockResetEnable dom, DomainPeriod dom ~ (HzToPeriod 25_175_000))
