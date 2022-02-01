@@ -11,4 +11,4 @@ packages:
 
 flags:
     clash-prelude:
-      multiple-hidden: false
+      multiple-hidden: true
