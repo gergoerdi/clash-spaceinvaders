@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, RecordWildCards, NumericUnderscores #-}
 import Clash.Shake
-import Clash.Shake.Xilinx
+import Clash.Shake.Xilinx as Xilinx
 
 import Development.Shake
 import Development.Shake.Command
@@ -17,9 +17,9 @@ import Control.Monad.Reader
 import Control.Monad.Trans.Class
 
 targets =
-    [ ("nexys-a7-50t", xilinxVivado nexysA750T)
-    , ("papilio-pro",  xilinxISE papilioPro)
-    , ("papilio-one",  xilinxISE papilioOne)
+    [ ("nexys-a7-50t", Xilinx.vivado nexysA750T)
+    , ("papilio-pro",  Xilinx.ise papilioPro)
+    , ("papilio-one",  Xilinx.ise papilioOne)
     ]
 
 outDir = "_build"
