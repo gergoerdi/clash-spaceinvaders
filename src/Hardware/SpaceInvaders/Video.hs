@@ -33,8 +33,27 @@ video
 video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
     ( delayVGA vgaSync rgb
     , toSignal extRead
-    , toSignal $ delayI Nothing line <* rgb
+    , toSignal line
     )
+  where
+    (vgaSync, rgb, intAddr, line) = video' intRead
+
+    intRead :> extRead :> Nil = sharedDelayedRW ram $
+        noWrite intAddr :>
+        extAddr `withWrite` extWrite :>
+        Nil
+      where
+        ram = singlePort $ delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0))
+
+video'
+    :: (HiddenClockResetEnable dom, DomainPeriod dom ~ (HzToPeriod 25_175_000))
+    => DSignal dom 1 (Maybe (Unsigned 8))
+    -> ( VGASync dom
+       , DSignal dom 1 (Unsigned 8, Unsigned 8, Unsigned 8)
+       , DSignal dom 0 (Maybe VidAddr)
+       , DSignal dom 1 (Maybe (Index VidY))
+       )
+video' intRead = (vgaSync, rgb, intAddr, delayI Nothing line <* rgb)
   where
     VGADriver{..} = vgaDriver vga640x480at60
 
@@ -46,13 +65,6 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
 
     bufAddr = liftA2 toVidAddr <$> bufX <*> bufY
     intAddr = guardA (liftD (changed Nothing) bufAddr) bufAddr
-
-    intRead :> extRead :> Nil = sharedDelayedRW ram $
-        noWrite intAddr :>
-        extAddr `withWrite` extWrite :>
-        Nil
-      where
-        ram = singlePort $ delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0))
 
     newPix = delayI False $ liftD (changed Nothing) pixX
 
