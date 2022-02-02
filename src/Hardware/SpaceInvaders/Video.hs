@@ -46,6 +46,33 @@ video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
       where
         ram = singlePort $ delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0))
 
+tunnelSpike
+    :: forall domA domB a.
+       (HiddenClockResetEnable domA, HiddenClockResetEnable domB, NFDataX a)
+    => Signal domA (Maybe a)
+    -> Signal domB (Maybe a)
+tunnelSpike sigA = sigB
+  where
+    newA = isJust <$> sigA
+
+    readyA = register False $
+        mux newA (pure True) $
+        mux ackA newA $
+        readyA
+
+    readyB = dualFlipFlopSynchronizer False readyA
+    bufB = register Nothing $
+        mux readyB (mplus <$> bufB <*> readB) $
+        pure Nothing
+    sigB = mux (changed False (isJust <$> bufB)) bufB (pure Nothing)
+
+    ackB = delay False $ isJust <$> bufB
+    ackA = dualFlipFlopSynchronizer False ackB
+
+    (readA, readB) = trueDualPortBlockRam @1 ramA ramB
+    ramA = mux readyA (pure $ RamRead 0) (RamWrite 0 <$> sigA)
+    ramB = pure $ RamRead 0
+
 video2
     :: forall domSys domVid.
        (HiddenClockResetEnable domSys)
@@ -59,14 +86,9 @@ video2
 video2 (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWrite) =
      ( delayVGA vgaSync rgb
      , toSignal extRead
-     , toSys $ toSignal line
+     , tunnelSpike $ toSignal line
      )
   where
-    toSys :: (NFDataX a) => Signal domVid a -> Signal domSys a
-    toSys vid =
-        let (sys, _, _) = asyncFIFOSynchronizer (SNat @2) (pure True) (Just <$> vid)
-        in sys
-
     (vgaSync, rgb, intAddr, line) = video' intRead
 
     packRamOp Nothing _ = RamRead 0
