@@ -53,25 +53,8 @@ tunnelSpike
     -> Signal domB (Maybe a)
 tunnelSpike sigA = sigB
   where
-    newA = isJust <$> sigA
-
-    readyA = register False $
-        mux newA (pure True) $
-        mux ackA newA $
-        readyA
-
-    readyB = dualFlipFlopSynchronizer False readyA
-    bufB = register Nothing $
-        mux readyB (mplus <$> bufB <*> readB) $
-        pure Nothing
-    sigB = mux (changed False (isJust <$> bufB)) bufB (pure Nothing)
-
-    ackB = delay False $ isJust <$> bufB
-    ackA = dualFlipFlopSynchronizer False ackB
-
-    (readA, readB) = trueDualPortBlockRam @1 ramA ramB
-    ramA = mux readyA (pure $ RamRead 0) (RamWrite 0 <$> sigA)
-    ramB = pure $ RamRead 0
+    (lastJustB, emptyB, _) = asyncFIFOSynchronizer (SNat @2) (pure True) sigA
+    sigB = enable (not <$> emptyB) lastJustB
 
 video2
     :: forall domSys domVid.
