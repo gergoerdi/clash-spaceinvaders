@@ -64,7 +64,7 @@ topEntity clkVid rstVid clkSys =
             { pStart = fromActive <$> l .&&. fromActive <$> r
             }
 
-        (vga, vidRead, line) = video2 vidAddr vidWrite
+        (vga, vidRead, line) = video vidAddr vidWrite
         (vidAddr, vidWrite) = mainBoard sws tilt coin (bbundle p1) (bbundle p2) vidRead line
 
 mainBoard

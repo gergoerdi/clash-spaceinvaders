@@ -23,42 +23,19 @@ type BufY = VidY
 type VidSize = BufX * BufY
 type VidAddr = Index VidSize
 
-video
-    :: (HiddenClockResetEnable Dom25)
-    => Signal Dom25 (Maybe VidAddr)
-    -> Signal Dom25 (Maybe (Unsigned 8))
-    -> ( VGAOut Dom25 8 8 8
-       , Signal Dom25 (Maybe (Unsigned 8))
-       , Signal Dom25 (Maybe (Index VidY))
-       )
-video (unsafeFromSignal -> extAddr) (unsafeFromSignal -> extWrite) =
-    ( delayVGA vgaSync rgb
-    , toSignal extRead
-    , toSignal line
-    )
-  where
-    (vgaSync, rgb, intAddr, line) = video' intRead
-
-    intRead :> extRead :> Nil = sharedDelayedRW ram $
-        noWrite intAddr :>
-        extAddr `withWrite` extWrite :>
-        Nil
-      where
-        ram = singlePort $ delayedRam (blockRamU ClearOnReset (SNat @VidSize) (const 0))
-
-tunnelSpike
-    :: forall domA domB a.
-       (HiddenClockResetEnable domA, HiddenClockResetEnable domB, NFDataX a)
+unsafeConvertJustSpike
+    :: forall domA domB a. (NFDataX a)
+    => (HiddenClockResetEnable domA, HiddenClockResetEnable domB)
     => Signal domA (Maybe a)
     -> Signal domB (Maybe a)
-tunnelSpike sigA = sigB
+unsafeConvertJustSpike sigA = sigB
   where
     (lastJustB, emptyB, _) = asyncFIFOSynchronizer (SNat @2) (pure True) sigA
     sigB = enable (not <$> emptyB) lastJustB
 
-video2
-    :: forall domSys domVid.
-       (HiddenClockResetEnable domSys)
+video
+    :: forall domSys domVid. ()
+    => (HiddenClockResetEnable domSys)
     => (HiddenClockResetEnable domVid, DomainPeriod domVid ~ HzToPeriod 25_175_000)
     => Signal domSys (Maybe VidAddr)
     -> Signal domSys (Maybe (Unsigned 8))
@@ -66,10 +43,10 @@ video2
        , Signal domSys (Maybe (Unsigned 8))
        , Signal domSys (Maybe (Index VidY))
        )
-video2 (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWrite) =
+video (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWrite) =
      ( delayVGA vgaSync rgb
      , toSignal extRead
-     , tunnelSpike $ toSignal line
+     , unsafeConvertJustSpike $ toSignal line
      )
   where
     (vgaSync, rgb, intAddr, line) = video' intRead
