@@ -3,6 +3,7 @@ module Hardware.SpaceInvaders.Video where
 
 import Clash.Prelude
 import qualified Clash.Signal.Delayed.Bundle as D
+import qualified RetroClash.MultiClock.Explicit as E
 import Clash.Prelude.BlockRam
 import RetroClash.Utils
 import RetroClash.VGA
@@ -28,10 +29,7 @@ unsafeConvertJustSpike
     => (HiddenClockResetEnable domA, HiddenClockResetEnable domB)
     => Signal domA (Maybe a)
     -> Signal domB (Maybe a)
-unsafeConvertJustSpike sigA = sigB
-  where
-    (lastJustB, emptyB, _) = asyncFIFOSynchronizer (SNat @2) (pure True) sigA
-    sigB = enable (not <$> emptyB) lastJustB
+unsafeConvertJustSpike = E.unsafeConvertJustSpike hasClock hasClock hasReset hasReset hasEnable hasEnable
 
 video
     :: forall domSys domVid. ()
