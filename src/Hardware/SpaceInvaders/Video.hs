@@ -1,10 +1,11 @@
 {-# LANGUAGE NumericUnderscores, RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 module Hardware.SpaceInvaders.Video where
 
 import Clash.Prelude
 import qualified Clash.Signal.Delayed.Bundle as D
 import qualified RetroClash.MultiClock.Explicit as E
-import Clash.Prelude.BlockRam
+import qualified Clash.Explicit.BlockRam as E
 import RetroClash.Utils
 import RetroClash.VGA
 import RetroClash.Video
@@ -24,36 +25,39 @@ type BufY = VidY
 type VidSize = BufX * BufY
 type VidAddr = Index VidSize
 
-unsafeConvertJustSpike
-    :: forall domA domB a. (NFDataX a)
-    => (HiddenClockResetEnable domA, HiddenClockResetEnable domB)
-    => Signal domA (Maybe a)
-    -> Signal domB (Maybe a)
-unsafeConvertJustSpike = E.unsafeConvertJustSpike hasClock hasClock hasReset hasReset hasEnable hasEnable
-
 video
-    :: forall domSys domVid. ()
-    => (HiddenClockResetEnable domSys)
-    => (HiddenClockResetEnable domVid, DomainPeriod domVid ~ HzToPeriod 25_175_000)
-    => Signal domSys (Maybe VidAddr)
+    :: forall domSys domVid. (KnownDomain domSys, KnownDomain domVid)
+    => (DomainPeriod domVid ~ HzToPeriod 25_175_000)
+    => Clock domVid -> Clock domSys
+    -> Reset domVid -> Reset domSys
+    -> Enable domVid -> Enable domSys
+    -> Signal domSys (Maybe VidAddr)
     -> Signal domSys (Maybe (Unsigned 8))
     -> ( VGAOut domVid 8 8 8
        , Signal domSys (Maybe (Unsigned 8))
        , Signal domSys (Maybe (Index VidY))
        )
-video (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWrite) =
-     ( delayVGA vgaSync rgb
+video
+  clkVid clkSys rstVid rstSys enVid enSys
+  (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWrite) =
+     ( withVid $ delayVGA vgaSync rgb
      , toSignal extRead
-     , unsafeConvertJustSpike $ toSignal line
+     , E.unsafeConvertJustSpike clkVid clkSys rstVid rstSys enVid enSys $ toSignal line
      )
   where
-    (vgaSync, rgb, intAddr, line) = video' intRead
+    withVid :: (HiddenClockResetEnable domVid => a) -> a
+    withVid = withClockResetEnable clkVid rstVid enVid
+
+    withSys :: (HiddenClockResetEnable domSys => a) -> a
+    withSys = withClockResetEnable clkSys rstSys enSys
+
+    (vgaSync, rgb, intAddr, line) = withVid $ video' intRead
 
     packRamOp Nothing _ = RamRead 0
     packRamOp (Just addr) wr = maybe (RamRead addr) (RamWrite addr) wr
 
     (unsafeFromSignal @_ @_ @1 -> intRead', unsafeFromSignal @_ @_ @1 -> extRead')
-        = trueDualPortBlockRam
+        = E.trueDualPortBlockRam clkVid clkSys
               (toSignal $ RamRead . fromMaybe 0 <$> intAddr)
               (toSignal $ packRamOp <$> extAddr <*> extWrite)
 
@@ -65,10 +69,10 @@ video (unsafeFromSignal @_ @_ @0 -> extAddr) (unsafeFromSignal @_ @_ @0 -> extWr
     enRead addr = enable $ delayI False (isJust <$> addr)
 
     intRead :: DSignal domVid 1 (Maybe (Unsigned 8))
-    intRead = enRead intAddr intRead'
+    intRead = withVid $ enRead intAddr intRead'
 
     extRead :: DSignal domSys 1 (Maybe (Unsigned 8))
-    extRead = enRead extAddr extRead'
+    extRead = withSys $ enRead extAddr extRead'
 
 video'
     :: (HiddenClockResetEnable dom, DomainPeriod dom ~ (HzToPeriod 25_175_000))

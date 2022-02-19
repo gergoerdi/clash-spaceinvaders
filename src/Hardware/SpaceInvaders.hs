@@ -1,4 +1,5 @@
 {-# LANGUAGE NumericUnderscores, RecordWildCards #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module Hardware.SpaceInvaders
     ( Player(..)
     , mainBoard
@@ -7,6 +8,7 @@ module Hardware.SpaceInvaders
 
 import Clash.Prelude
 import Clash.Annotations.TH
+import qualified Clash.Explicit.Reset as E
 
 import Hardware.SpaceInvaders.Video
 import Hardware.SpaceInvaders.Peripherals
@@ -37,17 +39,24 @@ topEntity
                        )
     -> "PS2"       ::: PS2 DomSys
     -> "VGA"       ::: VGAOut Dom25 8 8 8
-topEntity clkVid rstVid clkSys =
-    withSpecificClock @DomSys  clkSys $
-    withSpecificClock @Dom25   clkVid $
-    let rstSys = convertReset rstVid in
-    withSpecificReset @DomSys  rstSys $
-    withSpecificReset @Dom25   rstVid $
-    withSpecificEnable @DomSys enableGen $
-    withSpecificEnable @Dom25  enableGen $
-    board
+topEntity clkVid rstVid clkSys sws (c, u, d, l, r) ps2 = vga
   where
-    board sws (c, u, d, l, r) ps2 = vga
+    enVid = enableGen
+    rstSys = E.convertReset clkVid clkSys rstVid
+    enSys = enableGen
+
+    (vga, vidRead, line) = video clkVid clkSys rstVid rstSys enVid enSys vidAddr vidWrite
+
+    -- vidAddr :: Signal DomSys (Maybe VidAddr)
+    -- vidWrite :: Signal DomSys (Maybe (Unsigned 8))
+    (vidAddr, vidWrite) = withClockResetEnable clkSys rstSys enSys board
+
+    board
+        :: (HiddenClockResetEnable DomSys)
+        => ( Signal DomSys (Maybe VidAddr)
+           , Signal DomSys (Maybe (Unsigned 8))
+           )
+    board = mainBoard sws tilt coin (bbundle p1) (bbundle p2) vidRead line
       where
         sc = parseScanCode . decodePS2 . samplePS2 $ ps2
 
@@ -63,9 +72,6 @@ topEntity clkVid rstVid clkSys =
         p2 = p1
             { pStart = fromActive <$> l .&&. fromActive <$> r
             }
-
-        (vga, vidRead, line) = video vidAddr vidWrite
-        (vidAddr, vidWrite) = mainBoard sws tilt coin (bbundle p1) (bbundle p2) vidRead line
 
 mainBoard
     :: (HiddenClockResetEnable dom)

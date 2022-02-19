@@ -1,5 +1,4 @@
-resolver: clash-HEAD.yaml
-allow-newer: true
+resolver: clash-1.6.1.yaml
 
 extra-deps:
   - barbies-th-0.1.8
