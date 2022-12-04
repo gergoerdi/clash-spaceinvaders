@@ -1,13 +1,12 @@
-resolver: clash-1.6.1.yaml
+resolver: clash-1.6.4.yaml
 
 extra-deps:
-  - barbies-th-0.1.8
-  - monoidal-containers-0.6.0.1
+  - barbies-th-0.1.10
 
-  - retroclash-lib-0.1.1
+  - retroclash-lib-0.1.2
   - retroclash-sim-0.1.1
   - clash-shake-0.2.2
-  - clashilator-0.1.2
+  - clashilator-0.1.2.1
 
 packages:
   - clash-intel8080

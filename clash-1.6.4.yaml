@@ -1,0 +1,11 @@
+name: clash-1.6.4
+resolver: lts-19.21
+
+packages:
+  - clash-prelude-1.6.4
+  - clash-lib-1.6.4
+  - clash-ghc-1.6.4
+
+flags:
+    clash-prelude:
+      multiple-hidden: false

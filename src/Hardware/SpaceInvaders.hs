@@ -71,6 +71,7 @@ mainBoard sws tilt coin p1 p2 vidRead line = (vidAddr, vidWrite)
   where
     CPUOut{..} = intel8080 CPUIn{..}
 
+    pause = pure False
     (interruptRequest, rst) = interruptor irq (delay False _interruptAck)
     irq =
         mux (line .== Just 95) (pure $ Just 1) $
