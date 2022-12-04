@@ -38,7 +38,7 @@ main = shakeArgs shakeOptions{ shakeFiles = outDir } $ do
         let imageFile = "image/SpaceInvaders.rom"
         binImage (Just $ 8 * 1024) imageFile out
 
-    kit@ClashKit{..} <- clashRules (outDir </> "clash") Verilog
+    (clash, kit) <- clashRules (outDir </> "clash") Verilog
         [ "src" ]
         "Hardware.SpaceInvaders"
         [ "-Wno-partial-type-signatures"

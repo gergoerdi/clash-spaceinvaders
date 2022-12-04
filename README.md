@@ -64,14 +64,15 @@ Make a file called `build.mk` with content similar to the following:
 
 ```
 TARGET = papilio-pro-arcade
-CLASH = stack exec --
 ISE = ~/prog/docker/xilinx-14.7-ubuntu-12.04/run
 VIVADO = ~/prog/docker/xilinx-2019.1-ubuntu-18.04/run
+QUARTUS = ~/prog/quartus/wrapper.sh --
 ```
 
-The `CLASH`, `ISE` and `VIVADO` fields are to optionally wrap
-invocations of the Clash compiler and the Xilinx ISE / Vivado
-toolchain in case you want to run them via Stack, Docker, Nix, etc.
+The `ISE`, `VIVADO`, and `QUARTUS` fields are to optionally wrap
+invocations of the Xilinx ISE / Vivado and Intel Quartus toolchains in
+case you want to run them via Docker, Nix, shell scripts that set some
+environment variables, etc.
 
 Then you can build for the Papilio Pro by running the included `mk`
 script.
